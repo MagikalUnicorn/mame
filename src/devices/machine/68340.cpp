@@ -116,6 +116,17 @@ uint8_t m68340_cpu_device::int_ack(offs_t offset)
 		}
 	}
 
+	// The AVR selects autovectoring for external interrupts on levels 1-7.
+	// Internal modules always supply their programmed vector instead.
+	if ((response == 0) &&
+			(m_m68340SIM->m_mcr & m68340_sim::REG_MCR_ARBLV) &&
+			BIT(m_m68340SIM->m_avr_rsr, offset + 8))
+	{
+		vector = 0x18 + offset;
+		LOGMASKED(LOG_IPL, "External level %d interrupt autovectored with vector %02X\n", offset, vector);
+		response++;
+	}
+
 	if (response == 0)
 		logerror("Spurious interrupt (level %d)\n", offset);
 	else if (response > 1)
