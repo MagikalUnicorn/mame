@@ -99,7 +99,7 @@ protected:
 
 void bfm_cobra3_state::volume_control(uint8_t direction, uint8_t clock)
 {
-	int clock_changed = m_vol_clock ^ clock;
+	uint8_t const clock_changed = m_vol_clock ^ clock;
 
 	m_vol_clock = clock;
 	if (clock_changed)
@@ -117,7 +117,7 @@ void bfm_cobra3_state::volume_control(uint8_t direction, uint8_t clock)
 					m_volume--;
 			}
 
-			float fraction = (64 - m_volume) / 64.0f;
+			float const fraction = (32 - m_volume) / 32.0f;
 
 			m_ymz->set_output_gain(0, fraction);
 			m_ymz->set_output_gain(1, fraction);
@@ -398,8 +398,13 @@ INPUT_PORTS_END
 void bfm_cobra3_state::machine_start()
 {
 	m_active_strobe = 0;
+	m_vol_clock = 0;
+	m_volume = 0;
 	m_mainram = make_unique_clear<uint16_t[]>((1024 * 16) / 2);
 	m_nvram->set_base(m_mainram.get(), 1024 * 16);
+
+	save_item(NAME(m_vol_clock));
+	save_item(NAME(m_volume));
 }
 
 
