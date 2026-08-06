@@ -75,6 +75,20 @@ if SOUNDS["CDDA"] then
 end
 
 
+---------------------------------------------------
+-- MPEG-1 audio decoders
+--@src/devices/sound/tms320av110.h,SOUNDS["TMS320AV110"] = true
+---------------------------------------------------
+
+if SOUNDS["TMS320AV110"] then
+	files {
+		MAME_DIR .. "3rdparty/pl_mpeg/pl_mpeg.cpp",
+		MAME_DIR .. "src/devices/sound/tms320av110.cpp",
+		MAME_DIR .. "src/devices/sound/tms320av110.h",
+	}
+end
+
+
 
 ---------------------------------------------------
 -- Discrete component audio
