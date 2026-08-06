@@ -26,6 +26,7 @@ constexpr uint16_t MCR_SHARED = 0xe00f;
 constexpr uint16_t CCR_INTB = 0x8000;
 constexpr uint16_t CCR_INTN = 0x4000;
 constexpr uint16_t CCR_INTE = 0x2000;
+constexpr uint16_t CCR_ECO  = 0x1000;
 constexpr uint16_t CCR_SAPI = 0x0800;
 constexpr uint16_t CCR_DAPI = 0x0400;
 constexpr uint16_t CCR_REQ  = 0x0030;
@@ -144,8 +145,16 @@ void mc68340_dma_module_device::dreq_w(unsigned channel_number, int state)
 	uint8_t const old_state = channel.dreq;
 	channel.dreq = bool(state);
 
-	if (channel.dreq && !old_state)
+	// DREQ is active low.  Burst requests are level-sensitive, while
+	// cycle-steal requests are recognized on the falling edge.
+	if (!channel.dreq && old_state)
 		run(channel_number);
+}
+
+
+void mc68340_dma_module_device::done_w(unsigned channel_number, int state)
+{
+	m_channel[channel_number].done_in = bool(state);
 }
 
 
@@ -204,7 +213,7 @@ void mc68340_dma_module_device::run(unsigned channel_number)
 		while (channel.ccr & CCR_STR)
 			transfer(channel_number);
 	}
-	else if (channel.dreq)
+	else if (!channel.dreq)
 	{
 		// Burst mode continues while DREQ remains asserted; cycle-steal mode
 		// performs one operand transfer for each assertion.
@@ -212,7 +221,7 @@ void mc68340_dma_module_device::run(unsigned channel_number)
 		{
 			transfer(channel_number);
 		}
-		while ((request_mode == 0x0020) && channel.dreq && (channel.ccr & CCR_STR));
+		while ((request_mode == 0x0020) && !channel.dreq && (channel.ccr & CCR_STR));
 	}
 }
 
@@ -236,7 +245,16 @@ void mc68340_dma_module_device::transfer(unsigned channel_number)
 
 	uint8_t const source_fc = (channel.fcr >> 4) & 7;
 	uint8_t const destination_fc = channel.fcr & 7;
+	bool const external_request = (channel.ccr & CCR_REQ) != 0;
+	bool const source_request = (channel.ccr & CCR_ECO) != 0;
+	bool const last_transfer = channel.btc == transfer_bytes;
 	uint32_t data = 0;
+
+	if (external_request && source_request)
+	{
+		set_done_output(channel_number, last_transfer ? 0 : 1);
+		set_dack(channel_number, 0);
+	}
 
 	for (unsigned byte = 0; byte < transfer_bytes; byte += source_size)
 	{
@@ -252,6 +270,17 @@ void mc68340_dma_module_device::transfer(unsigned channel_number)
 			channel.sar += source_size;
 	}
 
+	if (external_request && source_request)
+	{
+		set_dack(channel_number, 1);
+		set_done_output(channel_number, 1);
+	}
+	else if (external_request)
+	{
+		set_done_output(channel_number, last_transfer ? 0 : 1);
+		set_dack(channel_number, 0);
+	}
+
 	for (unsigned byte = 0; byte < transfer_bytes; byte += destination_size)
 	{
 		unsigned const shift = (transfer_bytes - destination_size - byte) * 8;
@@ -265,10 +294,38 @@ void mc68340_dma_module_device::transfer(unsigned channel_number)
 			channel.dar += destination_size;
 	}
 
+	if (external_request && !source_request)
+	{
+		set_dack(channel_number, 1);
+		set_done_output(channel_number, 1);
+	}
+
 	channel.btc -= transfer_bytes;
-	if (!channel.btc)
+	if (!channel.btc || !channel.done_in)
 	{
 		set_status(channel, CSR_DONE);
+	}
+}
+
+
+void mc68340_dma_module_device::set_dack(unsigned channel_number, int state)
+{
+	channel_state &channel = m_channel[channel_number];
+	if (channel.dack != bool(state))
+	{
+		channel.dack = bool(state);
+		m_dack_out_cb[channel_number](state);
+	}
+}
+
+
+void mc68340_dma_module_device::set_done_output(unsigned channel_number, int state)
+{
+	channel_state &channel = m_channel[channel_number];
+	if (channel.done_out != bool(state))
+	{
+		channel.done_out = bool(state);
+		m_done_out_cb[channel_number](state);
 	}
 }
 
@@ -294,6 +351,10 @@ void mc68340_dma_module_device::device_start()
 	save_item(STRUCT_MEMBER(m_channel, dar));
 	save_item(STRUCT_MEMBER(m_channel, btc));
 	save_item(STRUCT_MEMBER(m_channel, dreq));
+	save_item(STRUCT_MEMBER(m_channel, done_in));
+	save_item(STRUCT_MEMBER(m_channel, dack));
+	save_item(STRUCT_MEMBER(m_channel, done_out));
+	machine().save().register_postload(save_prepost_delegate(FUNC(mc68340_dma_module_device::restore_outputs), this));
 }
 
 
@@ -304,17 +365,35 @@ void mc68340_dma_module_device::device_reset()
 		channel = {};
 		channel.mcr = 0x0080;
 		channel.intr = 0x000f;
+		channel.dreq = 1;
+		channel.done_in = 1;
+		channel.dack = 1;
+		channel.done_out = 1;
 	}
+	restore_outputs();
 }
 
 
 void mc68340_dma_module_device::module_reset()
 {
-	for (channel_state &channel : m_channel)
+	for (unsigned channel_number = 0; channel_number < 2; channel_number++)
 	{
+		channel_state &channel = m_channel[channel_number];
 		channel.ccr &= ~CCR_STR;
 		channel.csr = 0;
 		channel.intr = 0x000f;
+		set_dack(channel_number, 1);
+		set_done_output(channel_number, 1);
+	}
+}
+
+
+void mc68340_dma_module_device::restore_outputs()
+{
+	for (unsigned channel_number = 0; channel_number < 2; channel_number++)
+	{
+		m_dack_out_cb[channel_number](m_channel[channel_number].dack);
+		m_done_out_cb[channel_number](m_channel[channel_number].done_out);
 	}
 }
 
@@ -322,5 +401,7 @@ void mc68340_dma_module_device::module_reset()
 mc68340_dma_module_device::mc68340_dma_module_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
 	: device_t(mconfig, MC68340_DMA_MODULE, tag, owner, clock)
 	, m_cpu(nullptr)
+	, m_dack_out_cb(*this)
+	, m_done_out_cb(*this)
 {
 }

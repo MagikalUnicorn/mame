@@ -32,6 +32,10 @@ public:
 	auto tgate1_in_callback() { return m_timer[0]->m_tgate_in_cb.bind(); }
 	auto tout2_out_callback() { return m_timer[1]->m_tout_out_cb.bind(); }
 	auto tgate2_in_callback() { return m_timer[1]->m_tgate_in_cb.bind(); }
+	auto dma_dack1_out_callback() { return m_dma->dack_out_callback<0>(); }
+	auto dma_done1_out_callback() { return m_dma->done_out_callback<0>(); }
+	auto dma_dack2_out_callback() { return m_dma->dack_out_callback<1>(); }
+	auto dma_done2_out_callback() { return m_dma->done_out_callback<1>(); }
 
 	uint16_t get_cs(offs_t address);
 
@@ -43,9 +47,11 @@ public:
 	void tin2_w(int state)  { m_timer[1]->tin_w(state);  }
 	void tgate2_w(int state){ m_timer[1]->tgate_w(state); }
 
-	// DMA request inputs
+	// DMA handshake inputs are active low.
 	void dma_dreq1_w(int state) { m_dma->dreq_w<0>(state); }
+	void dma_done1_w(int state) { m_dma->done_w<0>(state); }
 	void dma_dreq2_w(int state) { m_dma->dreq_w<1>(state); }
+	void dma_done2_w(int state) { m_dma->done_w<1>(state); }
 
 protected:
 	virtual void device_start() override ATTR_COLD;
