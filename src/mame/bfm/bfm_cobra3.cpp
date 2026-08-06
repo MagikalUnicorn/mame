@@ -4,8 +4,7 @@
 /* Bellfruit SWP (Skill With Prizes) Video hardware
     aka Cobra 3
 
-   MPEG video decoding is preliminary.
-   TODO: MPEG audio decoding is not implemented.
+   MPEG video and audio decoding are preliminary.
 */
 
 
@@ -22,6 +21,7 @@
 #include "machine/rescap.h"
 #include "machine/scc66470.h"
 #include "machine/watchdog.h"
+#include "sound/tms320av110.h"
 #include "sound/ymz280b.h"
 #include "video/sti3400.h"
 
@@ -39,6 +39,7 @@ public:
 		m_maincpu(*this, "maincpu"),
 		m_cpuregion(*this, "maincpu"),
 		m_nvram(*this, "nvram"),
+		m_av110(*this, "av110"),
 		m_ymz(*this, "ymz280b"),
 		m_palette(*this, "palette"),
 		m_ramdac(*this, "ramdac"),
@@ -59,6 +60,7 @@ protected:
 	required_device<m68340_cpu_device> m_maincpu;
 	required_region_ptr<uint16_t> m_cpuregion;
 	required_device<nvram_device> m_nvram;
+	required_device<tms320av110_device> m_av110;
 	required_device<ymz280b_device> m_ymz;
 	required_device<palette_device> m_palette;
 	required_device<ramdac_device> m_ramdac;
@@ -118,6 +120,8 @@ void bfm_cobra3_state::volume_control(uint8_t direction, uint8_t clock)
 
 			m_ymz->set_output_gain(0, fraction);
 			m_ymz->set_output_gain(1, fraction);
+			m_av110->set_output_gain(0, fraction);
+			m_av110->set_output_gain(1, fraction);
 		}
 	}
 }
@@ -311,6 +315,8 @@ void bfm_cobra3_state::bfm_cobra3_map(address_map &map)
 	map(0x00000000, 0xffffffff).rw(FUNC(bfm_cobra3_state::mem_r), FUNC(bfm_cobra3_state::mem_w));
 	map(0x00800000, 0x009fffff).m(m_scc66470, FUNC(scc66470_device::map)).cswidth(16);
 	map(0x00a40000, 0x00a4007f).rw(m_sti3400, FUNC(sti3400_device::read), FUNC(sti3400_device::write));
+	map(0x00a80000, 0x00a80001).w(m_av110, FUNC(tms320av110_device::reset_w)).umask16(0x00ff);
+	map(0x00a81000, 0x00a810ff).rw(m_av110, FUNC(tms320av110_device::read), FUNC(tms320av110_device::write)).umask16(0x00ff);
 }
 
 void bfm_cobra3_state::ramdac_map(address_map &map)
@@ -370,7 +376,9 @@ static INPUT_PORTS_START( bfm_cobra3 )
 	PORT_DIPUNKNOWN_DIPLOC( 0x02, 0x00, "DIL:!02" )
 	PORT_DIPUNKNOWN_DIPLOC( 0x04, 0x00, "DIL:!03" )
 	PORT_DIPUNKNOWN_DIPLOC( 0x08, 0x00, "DIL:!04" )
-	PORT_DIPUNKNOWN_DIPLOC( 0x10, 0x00, "DIL:!05" )
+	PORT_DIPNAME( 0x10, 0x10, DEF_STR( Demo_Sounds ) ) PORT_DIPLOCATION("DIL:!05")
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x10, DEF_STR( On ) )
 	PORT_DIPUNKNOWN_DIPLOC( 0x20, 0x00, "DIL:!06" )
 	PORT_DIPUNKNOWN_DIPLOC( 0x40, 0x00, "DIL:!07" )
 	PORT_DIPUNKNOWN_DIPLOC( 0x80, 0x00, "DIL:!08" )
@@ -486,6 +494,11 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	YMZ280B(config, m_ymz, 16.9344_MHz_XTAL);
 	m_ymz->add_route(0, "lspeaker", 1.0);
 	m_ymz->add_route(1, "rspeaker", 1.0);
+
+	TMS320AV110(config, m_av110, 0);
+	m_av110->drq().set(m_maincpu, FUNC(m68340_cpu_device::dma_dreq2_w));
+	m_av110->add_route(0, "lspeaker", 1.0);
+	m_av110->add_route(1, "rspeaker", 1.0);
 
 	SCC66470(config,m_scc66470,30000000);
 	m_scc66470->set_addrmap(0, &bfm_cobra3_state::scc66470_map);
