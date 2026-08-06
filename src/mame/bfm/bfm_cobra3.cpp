@@ -388,7 +388,7 @@ void bfm_cobra3_state::dma1_drq(int state)
 
 void bfm_cobra3_state::scc66470_irq(int state)
 {
-	m_maincpu->set_input_line(5, !state);
+	m_maincpu->set_input_line(5, state);
 }
 
 uint32_t bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
