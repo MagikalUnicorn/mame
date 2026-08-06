@@ -4,7 +4,8 @@
 /* Bellfruit SWP (Skill With Prizes) Video hardware
     aka Cobra 3
 
-   TODO: MPEG decoding currently not implemented
+   MPEG video decoding is preliminary.
+   TODO: MPEG audio decoding is not implemented.
 */
 
 
@@ -22,6 +23,7 @@
 #include "machine/scc66470.h"
 #include "machine/watchdog.h"
 #include "sound/ymz280b.h"
+#include "video/sti3400.h"
 
 #include "screen.h"
 #include "speaker.h"
@@ -41,6 +43,7 @@ public:
 		m_palette(*this, "palette"),
 		m_ramdac(*this, "ramdac"),
 		m_scc66470(*this, "scc66470"),
+		m_sti3400(*this, "sti3400"),
 		m_strobein(*this, "STROBE%u", 0),
 		m_meters(*this, "meters"),
 		m_lamps(*this, "lamp%u", 0U),
@@ -60,6 +63,7 @@ protected:
 	required_device<palette_device> m_palette;
 	required_device<ramdac_device> m_ramdac;
 	required_device<scc66470_device> m_scc66470;
+	required_device<sti3400_device> m_sti3400;
 	required_ioport_array<5> m_strobein;
 	optional_device<meters_device> m_meters;
 	output_finder<256> m_lamps;
@@ -306,6 +310,7 @@ void bfm_cobra3_state::bfm_cobra3_map(address_map &map)
 {
 	map(0x00000000, 0xffffffff).rw(FUNC(bfm_cobra3_state::mem_r), FUNC(bfm_cobra3_state::mem_w));
 	map(0x00800000, 0x009fffff).m(m_scc66470, FUNC(scc66470_device::map)).cswidth(16);
+	map(0x00a40000, 0x00a4007f).rw(m_sti3400, FUNC(sti3400_device::read), FUNC(sti3400_device::write));
 }
 
 void bfm_cobra3_state::ramdac_map(address_map &map)
@@ -393,27 +398,38 @@ void bfm_cobra3_state::scc66470_irq(int state)
 
 uint32_t bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	if (m_scc66470->display_enabled())
+	if (cliprect.min_y == cliprect.max_y)
 	{
-		if (cliprect.min_y == cliprect.max_y)
+		uint32_t *const line = &bitmap.pix(cliprect.min_y);
+		std::fill_n(line, 768, 0);
+
+		if (m_sti3400->video_valid())
 		{
-			uint32_t *dest = &bitmap.pix(cliprect.min_y);
+			const unsigned source_y = std::min<unsigned>(
+				cliprect.min_y - 32 + 4,
+				m_sti3400->video_height() - 1);
+
+			for (unsigned x = 0; x < 352; x++)
+			{
+				const unsigned source_x = (x * m_sti3400->video_width()) / 352;
+				const u32 pixel = m_sti3400->video_pixel(source_x, source_y);
+				line[32 + (x * 2) + 0] = pixel;
+				line[32 + (x * 2) + 1] = pixel;
+			}
+		}
+
+		if (m_scc66470->display_enabled())
+		{
+			uint32_t *dest = line;
 			uint8_t buffer[768];
 			uint8_t *src = buffer;
 			m_scc66470->line(cliprect.min_y, buffer, sizeof(buffer));
 
-			src = buffer;
-
-			if (*src == 254)
-			{
-				// Other implementations suggest leaving transparency / MPEG border colour here to ease blending
-				src += 32;
-			}
-			else
-			{
+			if (*src != 254)
 				dest = std::fill_n(dest, 32, m_palette->pen(*src));
-				src += 32;
-			}
+			else
+				dest += 32;
+			src += 32;
 
 			/* mpeg video has significant overscan, 4 lines either side.
 
@@ -421,32 +437,25 @@ uint32_t bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bi
 
 			for (int x = 0 ; x < 352 ; x++)
 			{
-				if (*src == 254)
-				{
-					*dest++ = 0; // Will allow MPEG to be drawn i.e. transparent
-					src++;
-				}
+				if (*src != 254)
+					*dest++ = m_palette->pen(*src++);
 				else
 				{
-					*dest++ = m_palette->pen(*src++);
+					dest++;
+					src++;
 				}
 
-				if (*src == 254)
-				{
-					*dest++ = 0; // This should be mpeg video pixel i.e. transparent
-					src++;
-				}
+				if (*src != 254)
+					*dest++ = m_palette->pen(*src++);
 				else
 				{
-					*dest++ = m_palette->pen(*src++);
+					dest++;
+					src++;
 				}
 			}
-			// TODO: MPEG image will write a border of 32 pixels of mpeg border colour here when it's mixed in, see above.
 
 			if (*src != 254)
-			{
 				std::fill_n(dest, 32, m_palette->pen(*src));
-			}
 		}
 	}
 	return 0;
@@ -482,6 +491,9 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	m_scc66470->set_addrmap(0, &bfm_cobra3_state::scc66470_map);
 	m_scc66470->set_screen("screen");
 	m_scc66470->irq().set(FUNC(bfm_cobra3_state::scc66470_irq));
+
+	STI3400(config, m_sti3400, 0);
+	m_sti3400->irq().set_inputline(m_maincpu, 6);
 
 	auto &scsi(NSCSI_BUS(config, m_scsibus));
 	auto &cdrom(NSCSI_CDROM(config, "cdrom"));
