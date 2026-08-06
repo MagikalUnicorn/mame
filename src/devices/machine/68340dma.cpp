@@ -7,18 +7,7 @@
 
 #include <algorithm>
 
-
-uint16_t m68340_cpu_device::m68340_internal_dma_r(offs_t offset, uint16_t mem_mask)
-{
-	assert(m_m68340DMA);
-	return m_m68340DMA->read(offset, mem_mask);
-}
-
-void m68340_cpu_device::m68340_internal_dma_w(offs_t offset, uint16_t data, uint16_t mem_mask)
-{
-	assert(m_m68340DMA);
-	m_m68340DMA->write(*this, offset, data, mem_mask);
-}
+DEFINE_DEVICE_TYPE(MC68340_DMA_MODULE, mc68340_dma_module_device, "mc68340dma", "MC68340 DMA Module")
 
 
 namespace {
@@ -57,7 +46,7 @@ unsigned transfer_size(unsigned field)
 } // anonymous namespace
 
 
-uint16_t m68340_dma::read(offs_t offset, uint16_t mem_mask)
+uint16_t mc68340_dma_module_device::read(offs_t offset, uint16_t)
 {
 	unsigned const byte_offset = offset * 2;
 	channel_state const &channel = m_channel[BIT(byte_offset, 5)];
@@ -79,7 +68,7 @@ uint16_t m68340_dma::read(offs_t offset, uint16_t mem_mask)
 }
 
 
-void m68340_dma::write(m68340_cpu_device &cpu, offs_t offset, uint16_t data, uint16_t mem_mask)
+void mc68340_dma_module_device::write(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
 	unsigned const byte_offset = offset * 2;
 	unsigned const channel_number = BIT(byte_offset, 5);
@@ -103,20 +92,20 @@ void m68340_dma::write(m68340_cpu_device &cpu, offs_t offset, uint16_t data, uin
 	case 0x00:
 		combine16(channel.mcr);
 		m_channel[channel_number ^ 1].mcr = (m_channel[channel_number ^ 1].mcr & ~MCR_SHARED) | (channel.mcr & MCR_SHARED);
-		cpu.update_ipl();
+		m_cpu->update_ipl();
 		break;
 
 	case 0x04:
 		combine16(channel.intr);
-		cpu.update_ipl();
+		m_cpu->update_ipl();
 		break;
 
 	case 0x08:
 		combine16(channel.ccr);
 		if (channel.csr & CSR_IRQ)
 			channel.ccr &= ~CCR_STR;
-		cpu.update_ipl();
-		run(cpu, channel_number);
+		m_cpu->update_ipl();
+		run(channel_number);
 		break;
 
 	case 0x0a:
@@ -128,7 +117,7 @@ void m68340_dma::write(m68340_cpu_device &cpu, offs_t offset, uint16_t data, uin
 		}
 		if (ACCESSING_BITS_0_7)
 			channel.fcr = data;
-		cpu.update_ipl();
+		m_cpu->update_ipl();
 		break;
 
 	case 0x0c:
@@ -149,18 +138,18 @@ void m68340_dma::write(m68340_cpu_device &cpu, offs_t offset, uint16_t data, uin
 }
 
 
-void m68340_dma::dreq_w(m68340_cpu_device &cpu, unsigned channel_number, int state)
+void mc68340_dma_module_device::dreq_w(unsigned channel_number, int state)
 {
 	channel_state &channel = m_channel[channel_number];
 	uint8_t const old_state = channel.dreq;
 	channel.dreq = bool(state);
 
 	if (channel.dreq && !old_state)
-		run(cpu, channel_number);
+		run(channel_number);
 }
 
 
-bool m68340_dma::irq_pending(channel_state const &channel) const
+bool mc68340_dma_module_device::irq_pending(channel_state const &channel) const
 {
 	return ((channel.csr & CSR_DONE) && (channel.ccr & CCR_INTN)) ||
 		((channel.csr & (CSR_BES | CSR_BED | CSR_CONF)) && (channel.ccr & CCR_INTE)) ||
@@ -168,7 +157,7 @@ bool m68340_dma::irq_pending(channel_state const &channel) const
 }
 
 
-uint8_t m68340_dma::irq_level() const
+uint8_t mc68340_dma_module_device::irq_level() const
 {
 	uint8_t level = 0;
 	for (channel_state const &channel : m_channel)
@@ -180,7 +169,7 @@ uint8_t m68340_dma::irq_level() const
 }
 
 
-uint8_t m68340_dma::arbitrate(uint8_t level) const
+uint8_t mc68340_dma_module_device::arbitrate(uint8_t level) const
 {
 	for (channel_state const &channel : m_channel)
 	{
@@ -191,7 +180,7 @@ uint8_t m68340_dma::arbitrate(uint8_t level) const
 }
 
 
-uint8_t m68340_dma::irq_vector(uint8_t level) const
+uint8_t mc68340_dma_module_device::irq_vector(uint8_t level) const
 {
 	// Channel 1 has priority when both channels use the same interrupt level.
 	for (channel_state const &channel : m_channel)
@@ -203,7 +192,7 @@ uint8_t m68340_dma::irq_vector(uint8_t level) const
 }
 
 
-void m68340_dma::run(m68340_cpu_device &cpu, unsigned channel_number)
+void mc68340_dma_module_device::run(unsigned channel_number)
 {
 	channel_state &channel = m_channel[channel_number];
 	if (!(channel.ccr & CCR_STR) || (channel.mcr & MCR_STP))
@@ -213,7 +202,7 @@ void m68340_dma::run(m68340_cpu_device &cpu, unsigned channel_number)
 	if (!request_mode)
 	{
 		while (channel.ccr & CCR_STR)
-			transfer(cpu, channel_number);
+			transfer(channel_number);
 	}
 	else if (channel.dreq)
 	{
@@ -221,14 +210,14 @@ void m68340_dma::run(m68340_cpu_device &cpu, unsigned channel_number)
 		// performs one operand transfer for each assertion.
 		do
 		{
-			transfer(cpu, channel_number);
+			transfer(channel_number);
 		}
 		while ((request_mode == 0x0020) && channel.dreq && (channel.ccr & CCR_STR));
 	}
 }
 
 
-void m68340_dma::transfer(m68340_cpu_device &cpu, unsigned channel_number)
+void mc68340_dma_module_device::transfer(unsigned channel_number)
 {
 	channel_state &channel = m_channel[channel_number];
 	unsigned const source_size = transfer_size(channel.ccr >> 8);
@@ -241,7 +230,7 @@ void m68340_dma::transfer(m68340_cpu_device &cpu, unsigned channel_number)
 		(channel.btc % transfer_bytes) || (channel.sar & (source_size - 1)) ||
 		(channel.dar & (destination_size - 1)))
 	{
-		set_status(cpu, channel, CSR_CONF);
+		set_status(channel, CSR_CONF);
 		return;
 	}
 
@@ -254,9 +243,9 @@ void m68340_dma::transfer(m68340_cpu_device &cpu, unsigned channel_number)
 		uint32_t source_data;
 		switch (source_size)
 		{
-		case 1: source_data = cpu.m68ki_read_8_fc(channel.sar, source_fc); break;
-		case 2: source_data = cpu.m68ki_read_16_fc(channel.sar, source_fc); break;
-		default: source_data = cpu.m68ki_read_32_fc(channel.sar, source_fc); break;
+		case 1: source_data = m_cpu->m68ki_read_8_fc(channel.sar, source_fc); break;
+		case 2: source_data = m_cpu->m68ki_read_16_fc(channel.sar, source_fc); break;
+		default: source_data = m_cpu->m68ki_read_32_fc(channel.sar, source_fc); break;
 		}
 		data |= source_data << ((transfer_bytes - source_size - byte) * 8);
 		if (channel.ccr & CCR_SAPI)
@@ -268,9 +257,9 @@ void m68340_dma::transfer(m68340_cpu_device &cpu, unsigned channel_number)
 		unsigned const shift = (transfer_bytes - destination_size - byte) * 8;
 		switch (destination_size)
 		{
-		case 1: cpu.m68ki_write_8_fc(channel.dar, destination_fc, data >> shift); break;
-		case 2: cpu.m68ki_write_16_fc(channel.dar, destination_fc, data >> shift); break;
-		default: cpu.m68ki_write_32_fc(channel.dar, destination_fc, data); break;
+		case 1: m_cpu->m68ki_write_8_fc(channel.dar, destination_fc, data >> shift); break;
+		case 2: m_cpu->m68ki_write_16_fc(channel.dar, destination_fc, data >> shift); break;
+		default: m_cpu->m68ki_write_32_fc(channel.dar, destination_fc, data); break;
 		}
 		if (channel.ccr & CCR_DAPI)
 			channel.dar += destination_size;
@@ -279,19 +268,36 @@ void m68340_dma::transfer(m68340_cpu_device &cpu, unsigned channel_number)
 	channel.btc -= transfer_bytes;
 	if (!channel.btc)
 	{
-		set_status(cpu, channel, CSR_DONE);
+		set_status(channel, CSR_DONE);
 	}
 }
 
 
-void m68340_dma::set_status(m68340_cpu_device &cpu, channel_state &channel, uint8_t status)
+void mc68340_dma_module_device::set_status(channel_state &channel, uint8_t status)
 {
 	channel.csr |= CSR_IRQ | status;
 	channel.ccr &= ~CCR_STR;
-	cpu.update_ipl();
+	m_cpu->update_ipl();
 }
 
-void m68340_dma::reset()
+
+void mc68340_dma_module_device::device_start()
+{
+	m_cpu = downcast<m68340_cpu_device *>(owner());
+
+	save_item(STRUCT_MEMBER(m_channel, mcr));
+	save_item(STRUCT_MEMBER(m_channel, intr));
+	save_item(STRUCT_MEMBER(m_channel, ccr));
+	save_item(STRUCT_MEMBER(m_channel, csr));
+	save_item(STRUCT_MEMBER(m_channel, fcr));
+	save_item(STRUCT_MEMBER(m_channel, sar));
+	save_item(STRUCT_MEMBER(m_channel, dar));
+	save_item(STRUCT_MEMBER(m_channel, btc));
+	save_item(STRUCT_MEMBER(m_channel, dreq));
+}
+
+
+void mc68340_dma_module_device::device_reset()
 {
 	for (channel_state &channel : m_channel)
 	{
@@ -301,7 +307,8 @@ void m68340_dma::reset()
 	}
 }
 
-void m68340_dma::module_reset()
+
+void mc68340_dma_module_device::module_reset()
 {
 	for (channel_state &channel : m_channel)
 	{
@@ -309,4 +316,11 @@ void m68340_dma::module_reset()
 		channel.csr = 0;
 		channel.intr = 0x000f;
 	}
+}
+
+
+mc68340_dma_module_device::mc68340_dma_module_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
+	: device_t(mconfig, MC68340_DMA_MODULE, tag, owner, clock)
+	, m_cpu(nullptr)
+{
 }

@@ -18,7 +18,7 @@ class m68340_cpu_device : public fscpu32_device
 {
 	friend class mc68340_serial_module_device;
 	friend class mc68340_timer_module_device;
-	friend class m68340_dma;
+	friend class mc68340_dma_module_device;
 
 public:
 	m68340_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
@@ -44,8 +44,8 @@ public:
 	void tgate2_w(int state){ m_timer[1]->tgate_w(state); }
 
 	// DMA request inputs
-	void dma_dreq1_w(int state) { m_m68340DMA->dreq_w(*this, 0, state); }
-	void dma_dreq2_w(int state) { m_m68340DMA->dreq_w(*this, 1, state); }
+	void dma_dreq1_w(int state) { m_dma->dreq_w<0>(state); }
+	void dma_dreq2_w(int state) { m_dma->dreq_w<1>(state); }
 
 protected:
 	virtual void device_start() override ATTR_COLD;
@@ -58,6 +58,7 @@ protected:
 private:
 	required_device<mc68340_serial_module_device> m_serial;
 	required_device_array<mc68340_timer_module_device, 2> m_timer;
+	required_device<mc68340_dma_module_device> m_dma;
 
 	void update_ipl();
 	void internal_vectors_r(address_map &map) ATTR_COLD;
@@ -89,8 +90,6 @@ private:
 
 	uint16_t m68340_internal_base_r(offs_t offset, uint16_t mem_mask = ~0);
 	void m68340_internal_base_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
-	uint16_t m68340_internal_dma_r(offs_t offset, uint16_t mem_mask = ~0);
-	void m68340_internal_dma_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
 	uint16_t m68340_internal_sim_r(offs_t offset, uint16_t mem_mask = ~0);
 	uint8_t m68340_internal_sim_ports_r(offs_t offset);
 	uint16_t m68340_internal_sim_cs_r(offs_t offset, uint16_t mem_mask = ~0);
@@ -106,7 +105,6 @@ private:
 
 	/* 68340 peripheral modules */
 	m68340_sim*    m_m68340SIM;
-	m68340_dma*    m_m68340DMA;
 
 	uint32_t m_m68340_base;
 
