@@ -145,8 +145,7 @@ uint16_t bfm_cobra3_state::mem_r(offs_t offset, uint16_t mem_mask)
 
 					case 0x400:
 						{
-							//input reads, haven't got far enough to trigger any
-							return m_strobein[m_active_strobe]->read();
+							return m_strobein[m_active_strobe]->read() << 8;
 						}
 					case 0x500: //SCSI DMA
 						if (ACCESSING_BITS_8_15)
