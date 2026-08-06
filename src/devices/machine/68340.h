@@ -18,6 +18,7 @@ class m68340_cpu_device : public fscpu32_device
 {
 	friend class mc68340_serial_module_device;
 	friend class mc68340_timer_module_device;
+	friend class m68340_dma;
 
 public:
 	m68340_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
@@ -41,6 +42,10 @@ public:
 	void tgate1_w(int state){ m_timer[0]->tgate_w(state); }
 	void tin2_w(int state)  { m_timer[1]->tin_w(state);  }
 	void tgate2_w(int state){ m_timer[1]->tgate_w(state); }
+
+	// DMA request inputs
+	void dma_dreq1_w(int state) { m_m68340DMA->dreq_w(*this, 0, state); }
+	void dma_dreq2_w(int state) { m_m68340DMA->dreq_w(*this, 1, state); }
 
 protected:
 	virtual void device_start() override ATTR_COLD;

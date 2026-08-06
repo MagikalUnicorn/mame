@@ -54,7 +54,8 @@ void m68340_cpu_device::update_ipl()
 		pit_irq_level(),
 		m_serial->irq_level(),
 		m_timer[0]->irq_level(),
-		m_timer[1]->irq_level()
+		m_timer[1]->irq_level(),
+		m_m68340DMA ? m_m68340DMA->irq_level() : uint8_t(0)
 	});
 	if (m_ipl != new_ipl)
 	{
@@ -79,8 +80,9 @@ uint8_t m68340_cpu_device::int_ack(offs_t offset)
 	uint8_t scu_iarb = m_serial->arbitrate(offset);
 	uint8_t t1_iarb = m_timer[0]->arbitrate(offset);
 	uint8_t t2_iarb = m_timer[1]->arbitrate(offset);
-	uint8_t iarb = std::max({pit_iarb, scu_iarb, t1_iarb, t2_iarb});
-	LOGMASKED(LOG_IPL, "Level %d interrupt arbitration: PIT = %X, SCU = %X, T1 = %X, T2 = %X\n", offset, pit_iarb, scu_iarb, t1_iarb, t2_iarb);
+	uint8_t dma_iarb = m_m68340DMA->arbitrate(offset);
+	uint8_t iarb = std::max({pit_iarb, scu_iarb, t1_iarb, t2_iarb, dma_iarb});
+	LOGMASKED(LOG_IPL, "Level %d interrupt arbitration: PIT = %X, SCU = %X, T1 = %X, T2 = %X, DMA = %X\n", offset, pit_iarb, scu_iarb, t1_iarb, t2_iarb, dma_iarb);
 	int response = 0;
 	uint8_t vector = 0x18; // Spurious interrupt
 
@@ -112,6 +114,13 @@ uint8_t m68340_cpu_device::int_ack(offs_t offset)
 		{
 			vector = pit_iack();
 			LOGMASKED(LOG_IPL, "PIT acknowledged interrupt with vector %02X\n", vector);
+			response++;
+		}
+
+		if (iarb == dma_iarb)
+		{
+			vector = m_m68340DMA->irq_vector(offset);
+			LOGMASKED(LOG_IPL, "DMA acknowledged interrupt with vector %02X\n", vector);
 			response++;
 		}
 	}
@@ -282,6 +291,19 @@ void m68340_cpu_device::device_start()
 
 	m_m68340SIM->reset();
 	m_m68340DMA->reset();
+
+	for (unsigned channel = 0; channel < 2; channel++)
+	{
+		save_item(m_m68340DMA->m_channel[channel].mcr, "dma_mcr", channel);
+		save_item(m_m68340DMA->m_channel[channel].intr, "dma_intr", channel);
+		save_item(m_m68340DMA->m_channel[channel].ccr, "dma_ccr", channel);
+		save_item(m_m68340DMA->m_channel[channel].csr, "dma_csr", channel);
+		save_item(m_m68340DMA->m_channel[channel].fcr, "dma_fcr", channel);
+		save_item(m_m68340DMA->m_channel[channel].sar, "dma_sar", channel);
+		save_item(m_m68340DMA->m_channel[channel].dar, "dma_dar", channel);
+		save_item(m_m68340DMA->m_channel[channel].btc, "dma_btc", channel);
+		save_item(m_m68340DMA->m_channel[channel].dreq, "dma_dreq", channel);
+	}
 
 	start_68340_sim();
 
