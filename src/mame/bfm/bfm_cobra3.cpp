@@ -383,7 +383,7 @@ void bfm_cobra3_state::machine_start()
 
 void bfm_cobra3_state::dma1_drq(int state)
 {
-//  m_maincpu->dma_dreq1_w(state);
+	m_maincpu->dma_dreq1_w(state);
 }
 
 void bfm_cobra3_state::scc66470_irq(int state)
