@@ -41,9 +41,12 @@ void sti3400_device::device_start()
 	save_item(NAME(m_fifo));
 	save_item(NAME(m_decode_staging));
 	save_item(NAME(m_event_position));
+	save_item(NAME(m_event_code));
 	save_pointer(NAME(m_video_frame), MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT);
 	save_item(NAME(m_fifo_write));
 	save_item(NAME(m_fifo_read));
+	save_item(NAME(m_decode_stream_base));
+	save_item(NAME(m_decode_stream_written));
 	save_item(NAME(m_start_code_shift));
 	save_item(NAME(m_decode_staging_count));
 	save_item(NAME(m_video_width));
@@ -57,6 +60,8 @@ void sti3400_device::device_start()
 	save_item(NAME(m_irq_suppressed));
 	save_item(NAME(m_irq_state));
 	save_item(NAME(m_video_valid));
+	save_item(NAME(m_decode_has_sequence_header));
+	save_item(NAME(m_decode_sequence_ended));
 }
 
 void sti3400_device::device_reset()
@@ -68,10 +73,13 @@ void sti3400_device::device_reset()
 	std::fill(std::begin(m_fifo), std::end(m_fifo), 0);
 	std::fill(std::begin(m_decode_staging), std::end(m_decode_staging), 0);
 	std::fill(std::begin(m_event_position), std::end(m_event_position), 0);
+	std::fill(std::begin(m_event_code), std::end(m_event_code), 0);
 	std::fill_n(m_video_frame.get(), MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT, 0);
 
 	m_fifo_write = 0;
 	m_fifo_read = 0;
+	m_decode_stream_base = 0;
+	m_decode_stream_written = 0;
 	m_start_code_shift = 0xffffffff;
 	m_decode_staging_count = 0;
 	m_video_width = 0;
@@ -85,6 +93,8 @@ void sti3400_device::device_reset()
 	m_irq_suppressed = false;
 	m_irq_state = false;
 	m_video_valid = false;
+	m_decode_has_sequence_header = false;
+	m_decode_sequence_ended = false;
 	m_irq_cb(CLEAR_LINE);
 	m_decode_timer->adjust(attotime::from_hz(25));
 }
@@ -115,12 +125,45 @@ void sti3400_device::decoder_flush()
 		return;
 
 	plm_buffer_write(m_decode_buffer, m_decode_staging, m_decode_staging_count);
+	m_decode_stream_written += m_decode_staging_count;
 	m_decode_staging_count = 0;
+}
+
+void sti3400_device::decoder_soft_reset()
+{
+	decoder_destroy();
+	decoder_create();
+
+	std::fill(std::begin(m_fifo), std::end(m_fifo), 0);
+	std::fill(std::begin(m_decode_staging), std::end(m_decode_staging), 0);
+	std::fill(std::begin(m_event_position), std::end(m_event_position), 0);
+	std::fill(std::begin(m_event_code), std::end(m_event_code), 0);
+
+	m_fifo_write = 0;
+	m_fifo_read = 0;
+	m_decode_stream_base = 0;
+	m_decode_stream_written = 0;
+	m_start_code_shift = 0xffffffff;
+	m_decode_staging_count = 0;
+	m_event_head = 0;
+	m_event_tail = 0;
+	m_event_count = 0;
+	m_event_active = false;
+	m_picture_complete = false;
+	m_picture_completion_armed = true;
+	m_irq_suppressed = false;
+	m_decode_has_sequence_header = false;
+	m_decode_sequence_ended = false;
+	update_irq();
 }
 
 TIMER_CALLBACK_MEMBER(sti3400_device::decode_tick)
 {
 	decoder_flush();
+
+	// Keep a completed dynamic stream marked as ended while PL_MPEG drains and compacts its buffer.
+	if (m_decode_sequence_ended)
+		plm_buffer_signal_end(m_decode_buffer);
 
 	if (plm_frame_t *const frame = plm_video_decode(m_video_decoder))
 	{
@@ -129,6 +172,7 @@ TIMER_CALLBACK_MEMBER(sti3400_device::decode_tick)
 		plm_frame_to_bgra(frame, reinterpret_cast<u8 *>(m_video_frame.get()), MAX_VIDEO_WIDTH * sizeof(u32));
 		m_video_valid = true;
 	}
+	activate_event();
 
 	const double frame_rate = plm_video_get_framerate(m_video_decoder);
 	m_decode_timer->adjust(frame_rate > 0.0
@@ -149,20 +193,44 @@ void sti3400_device::stream_byte_w(u8 data)
 	if ((m_start_code_shift & 0xffffff00) == 0x00000100)
 	{
 		const u8 code = m_start_code_shift;
+		if (code == 0xb7)
+			m_decode_sequence_ended = true;
+		if (code == 0xb3)
+		{
+			if (m_decode_has_sequence_header && m_decode_sequence_ended)
+			{
+				// PL_MPEG does not apply a new sequence header to an existing video decoder.
+				// Repeated headers within one sequence must retain their reference pictures.
+				decoder_destroy();
+				decoder_create();
+				m_decode_stream_base = m_fifo_write - 4;
+				m_decode_stream_written = 0;
+				m_decode_staging[0] = 0x00;
+				m_decode_staging[1] = 0x00;
+				m_decode_staging[2] = 0x01;
+				m_decode_staging[3] = 0xb3;
+				m_decode_staging_count = 4;
+			}
+			else
+			{
+				m_decode_has_sequence_header = true;
+			}
+			m_decode_sequence_ended = false;
+		}
 
 		// The start-code interrupt is used for MPEG headers, not slice data.
 		if ((code == 0x00) || (code == 0xb2) || (code == 0xb3) ||
 			(code == 0xb5) || (code == 0xb7) || (code == 0xb8))
 		{
 			LOGMASKED(LOG_START_CODES, "start code %02x at %08x\n", code, u32(m_fifo_write - 1));
-			queue_start_code(m_fifo_write - 1);
+			queue_start_code(m_fifo_write - 1, code);
 		}
 	}
 
 	activate_event();
 }
 
-void sti3400_device::queue_start_code(u64 position)
+void sti3400_device::queue_start_code(u64 position, u8 code)
 {
 	if (m_event_count == EVENT_COUNT)
 	{
@@ -171,6 +239,7 @@ void sti3400_device::queue_start_code(u64 position)
 	}
 
 	m_event_position[m_event_tail] = position;
+	m_event_code[m_event_tail] = code;
 	m_event_tail = (m_event_tail + 1) & (EVENT_COUNT - 1);
 	m_event_count++;
 	activate_event();
@@ -181,9 +250,17 @@ void sti3400_device::activate_event()
 	if (!m_event_active && m_event_count)
 	{
 		const u64 position = m_event_position[m_event_head];
-		const u8 code = m_fifo[position & (FIFO_SIZE - 1)];
+		const u8 code = m_event_code[m_event_head];
 		if ((code != 0xb7) && ((m_fifo_write - position) < HEADER_LOOKAHEAD))
 			return;
+		if (code == 0xb7)
+		{
+			// Sequence end is detected as the compressed stream is consumed, not as the FIFO is filled.
+			const u64 decode_position = m_decode_stream_base + m_decode_stream_written
+				- plm_buffer_get_remaining(m_decode_buffer);
+			if (decode_position <= position)
+				return;
+		}
 
 		m_event_active = true;
 		m_irq_suppressed = false;
@@ -196,7 +273,7 @@ void sti3400_device::finish_event()
 {
 	if (m_event_active)
 	{
-		if (m_picture_completion_armed && (m_fifo[m_event_position[m_event_head] & (FIFO_SIZE - 1)] == 0x00))
+		if (m_picture_completion_armed && (m_event_code[m_event_head] == 0x00))
 		{
 			m_picture_complete = true;
 			m_picture_completion_armed = false;
@@ -276,10 +353,16 @@ void sti3400_device::write(offs_t offset, u16 data, u16 mem_mask)
 
 	decoder_flush();
 
+	const u16 old_data = m_registers[address >> 1];
 	COMBINE_DATA(&m_registers[address >> 1]);
 
 	switch (address)
 	{
+	case 0x14: // control
+		if (BIT(old_data, 1) && !BIT(m_registers[address >> 1], 1))
+			decoder_soft_reset();
+		break;
+
 	case 0x1c: // interrupt mask
 		if (!m_registers[address >> 1])
 			m_picture_completion_armed = true;

@@ -42,8 +42,9 @@ private:
 	void decoder_create();
 	void decoder_destroy();
 	void decoder_flush();
+	void decoder_soft_reset();
 	TIMER_CALLBACK_MEMBER(decode_tick);
-	void queue_start_code(u64 position);
+	void queue_start_code(u64 position, u8 code);
 	void activate_event();
 	void finish_event();
 	void update_irq();
@@ -55,6 +56,7 @@ private:
 	u8 m_fifo[FIFO_SIZE];
 	u8 m_decode_staging[DECODE_STAGING_SIZE];
 	u64 m_event_position[EVENT_COUNT];
+	u8 m_event_code[EVENT_COUNT];
 	std::unique_ptr<u32[]> m_video_frame;
 	plm_buffer_t *m_decode_buffer;
 	plm_video_t *m_video_decoder;
@@ -62,6 +64,8 @@ private:
 
 	u64 m_fifo_write;
 	u64 m_fifo_read;
+	u64 m_decode_stream_base;
+	u64 m_decode_stream_written;
 	u32 m_start_code_shift;
 	u16 m_decode_staging_count;
 	u16 m_video_width;
@@ -75,6 +79,8 @@ private:
 	bool m_irq_suppressed;
 	bool m_irq_state;
 	bool m_video_valid;
+	bool m_decode_has_sequence_header;
+	bool m_decode_sequence_ended;
 };
 
 DECLARE_DEVICE_TYPE(STI3400, sti3400_device)
