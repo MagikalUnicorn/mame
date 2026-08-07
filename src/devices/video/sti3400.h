@@ -32,13 +32,72 @@ protected:
 	virtual void device_stop() override ATTR_COLD;
 
 private:
+	// STi3400 host-interface register addresses from the data sheet.
+	static constexpr unsigned REG_CDF = 0x00;
+	static constexpr unsigned REG_HDF = 0x02;
+	static constexpr unsigned REG_HDP = 0x04;
+	static constexpr unsigned REG_STA = 0x08;
+	static constexpr unsigned REG_CTL = 0x0a;
+	static constexpr unsigned REG_ITM = 0x0e;
+	static constexpr unsigned REG_ITS = 0x10;
+	static constexpr unsigned REG_HDS = 0x12;
+	static constexpr unsigned REG_INS = 0x14;
+	static constexpr unsigned REG_BBB = 0x16;
+	static constexpr unsigned REG_BBL = 0x22;
+	static constexpr unsigned REG_BBT = 0x32;
+
+	static constexpr u16 STA_SCH = 0x0001;
+	static constexpr u16 STA_HFE = 0x0004;
+	static constexpr u16 STA_BBF = 0x0008;
+	static constexpr u16 STA_BBE = 0x0010;
+	static constexpr u16 STA_PID = 0x0200;
+	static constexpr u16 STA_HFF = 0x1000;
+	static constexpr u16 STA_RESET = STA_PID | STA_BBE | STA_HFE;
+
+	static constexpr u16 CTL_EDC = 0x0001;
+	static constexpr u16 CTL_SRS = 0x0002;
+	static constexpr u16 CTL_DVS = 0x0080;
+	static constexpr u16 INS_WAIT = 0x0004;
+
+	// The currently implemented portion of the host interface uses six address bits.
+	static constexpr unsigned REGISTER_ADDRESS_BITS = 6;
+	static constexpr unsigned REGISTER_COUNT = 1U << REGISTER_ADDRESS_BITS;
+	static constexpr unsigned REGISTER_ADDRESS_MASK = REGISTER_COUNT - 1;
+
+	// Bit-buffer levels and thresholds are 14-bit counts of 256-byte units.
+	static constexpr unsigned BIT_BUFFER_LEVEL_BITS = 14;
+	static constexpr unsigned BIT_BUFFER_LEVEL_UNIT_BYTES = 256;
+	static constexpr unsigned BIT_BUFFER_LEVEL_BIAS_BYTES = 64;
+	static constexpr u16 BIT_BUFFER_LEVEL_MASK = (1U << BIT_BUFFER_LEVEL_BITS) - 1;
 	// This is stream history for header searches, not the STi3400's 512-bit CD FIFO.
-	static constexpr unsigned STREAM_HISTORY_SIZE = 1U << (14 + 8); // BBS is in 256-byte units
-	static constexpr unsigned EVENT_COUNT = 0x100;
-	static constexpr unsigned HEADER_LOOKAHEAD = 0x100;
-	static constexpr unsigned DECODE_STAGING_SIZE = 0x800;
+	static constexpr unsigned STREAM_HISTORY_SIZE = (BIT_BUFFER_LEVEL_MASK + 1U) * BIT_BUFFER_LEVEL_UNIT_BYTES;
+	// The header FIFO is 256 bits wide.
+	static constexpr unsigned HEADER_FIFO_BYTES = 256 / 8;
+
+	static constexpr u32 MPEG_START_CODE_SHIFT_RESET = ~u32(0);
+	static constexpr u32 MPEG_START_CODE_MASK = 0xffffff00U;
+	static constexpr u32 MPEG_START_CODE_PREFIX = 0x00000100U;
+	static constexpr u8 MPEG_PICTURE_START_CODE = 0x00;
+	static constexpr u8 MPEG_NON_SLICE_CODE_MIN = 0xb0;
+	static constexpr u8 MPEG_SEQUENCE_HEADER_CODE = 0xb3;
+	static constexpr u8 MPEG_SEQUENCE_END_CODE = 0xb7;
+	static constexpr unsigned MPEG_START_CODE_BYTES = 4;
+
+	// These tune the high-level software decoder and are not hardware FIFO capacities.
+	// Event and lookahead capacity allows the host to parse headers while the input stream continues to arrive.
+	static constexpr unsigned START_CODE_EVENT_COUNT = 256;
+	static constexpr unsigned HEADER_LOOKAHEAD_BYTES = 256;
+	// Writes are batched for PL_MPEG, whose initial allocation grows automatically as required.
+	static constexpr unsigned DECODE_STAGING_BYTES = 2 * 1024;
+	static constexpr unsigned DECODE_BUFFER_INITIAL_BYTES = 64 * 1024;
+	// Use the PAL frame rate until the MPEG sequence header supplies one.
+	static constexpr unsigned DEFAULT_FRAME_RATE = 25;
+	// The current implementation provides an SD output surface for the supported MPEG-1 streams.
 	static constexpr unsigned MAX_VIDEO_WIDTH = 720;
 	static constexpr unsigned MAX_VIDEO_HEIGHT = 576;
+
+	static_assert(!(STREAM_HISTORY_SIZE & (STREAM_HISTORY_SIZE - 1)), "stream history size must be a power of two");
+	static_assert(!(START_CODE_EVENT_COUNT & (START_CODE_EVENT_COUNT - 1)), "event count must be a power of two");
 
 	void stream_byte_w(u8 data);
 	void decoder_create();
@@ -57,11 +116,11 @@ private:
 
 	devcb_write_line m_irq_cb;
 
-	u16 m_registers[0x40];
+	u16 m_registers[REGISTER_COUNT];
 	u8 m_fifo[STREAM_HISTORY_SIZE];
-	u8 m_decode_staging[DECODE_STAGING_SIZE];
-	u64 m_event_position[EVENT_COUNT];
-	u8 m_event_code[EVENT_COUNT];
+	u8 m_decode_staging[DECODE_STAGING_BYTES];
+	u64 m_event_position[START_CODE_EVENT_COUNT];
+	u8 m_event_code[START_CODE_EVENT_COUNT];
 	std::unique_ptr<u32[]> m_video_frame;
 	std::unique_ptr<u32[]> m_decoded_frame;
 	plm_buffer_t *m_decode_buffer;
