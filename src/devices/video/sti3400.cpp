@@ -34,6 +34,7 @@ sti3400_device::sti3400_device(const machine_config &mconfig, const char *tag, d
 void sti3400_device::device_start()
 {
 	m_video_frame = make_unique_clear<u32[]>(MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT);
+	m_decoded_frame = make_unique_clear<u32[]>(MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT);
 	decoder_create();
 	m_decode_timer = timer_alloc(FUNC(sti3400_device::decode_tick), this);
 
@@ -43,6 +44,7 @@ void sti3400_device::device_start()
 	save_item(NAME(m_event_position));
 	save_item(NAME(m_event_code));
 	save_pointer(NAME(m_video_frame), MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT);
+	save_pointer(NAME(m_decoded_frame), MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT);
 	save_item(NAME(m_fifo_write));
 	save_item(NAME(m_fifo_read));
 	save_item(NAME(m_decode_stream_base));
@@ -51,6 +53,8 @@ void sti3400_device::device_start()
 	save_item(NAME(m_decode_staging_count));
 	save_item(NAME(m_video_width));
 	save_item(NAME(m_video_height));
+	save_item(NAME(m_decoded_width));
+	save_item(NAME(m_decoded_height));
 	save_item(NAME(m_event_head));
 	save_item(NAME(m_event_tail));
 	save_item(NAME(m_event_count));
@@ -60,6 +64,7 @@ void sti3400_device::device_start()
 	save_item(NAME(m_irq_suppressed));
 	save_item(NAME(m_irq_state));
 	save_item(NAME(m_video_valid));
+	save_item(NAME(m_decoded_frame_pending));
 	save_item(NAME(m_decode_has_sequence_header));
 	save_item(NAME(m_decode_sequence_ended));
 }
@@ -75,6 +80,7 @@ void sti3400_device::device_reset()
 	std::fill(std::begin(m_event_position), std::end(m_event_position), 0);
 	std::fill(std::begin(m_event_code), std::end(m_event_code), 0);
 	std::fill_n(m_video_frame.get(), MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT, 0);
+	std::fill_n(m_decoded_frame.get(), MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT, 0);
 
 	m_fifo_write = 0;
 	m_fifo_read = 0;
@@ -84,6 +90,8 @@ void sti3400_device::device_reset()
 	m_decode_staging_count = 0;
 	m_video_width = 0;
 	m_video_height = 0;
+	m_decoded_width = 0;
+	m_decoded_height = 0;
 	m_event_head = 0;
 	m_event_tail = 0;
 	m_event_count = 0;
@@ -93,6 +101,7 @@ void sti3400_device::device_reset()
 	m_irq_suppressed = false;
 	m_irq_state = false;
 	m_video_valid = false;
+	m_decoded_frame_pending = false;
 	m_decode_has_sequence_header = false;
 	m_decode_sequence_ended = false;
 	m_irq_cb(CLEAR_LINE);
@@ -152,6 +161,7 @@ void sti3400_device::decoder_soft_reset()
 	m_picture_complete = false;
 	m_picture_completion_armed = true;
 	m_irq_suppressed = false;
+	m_decoded_frame_pending = false;
 	m_decode_has_sequence_header = false;
 	m_decode_sequence_ended = false;
 	update_irq();
@@ -167,10 +177,10 @@ TIMER_CALLBACK_MEMBER(sti3400_device::decode_tick)
 
 	if (plm_frame_t *const frame = plm_video_decode(m_video_decoder))
 	{
-		m_video_width = std::min<unsigned>(frame->width, MAX_VIDEO_WIDTH);
-		m_video_height = std::min<unsigned>(frame->height, MAX_VIDEO_HEIGHT);
-		plm_frame_to_bgra(frame, reinterpret_cast<u8 *>(m_video_frame.get()), MAX_VIDEO_WIDTH * sizeof(u32));
-		m_video_valid = true;
+		m_decoded_width = std::min<unsigned>(frame->width, MAX_VIDEO_WIDTH);
+		m_decoded_height = std::min<unsigned>(frame->height, MAX_VIDEO_HEIGHT);
+		plm_frame_to_bgra(frame, reinterpret_cast<u8 *>(m_decoded_frame.get()), MAX_VIDEO_WIDTH * sizeof(u32));
+		m_decoded_frame_pending = true;
 	}
 	activate_event();
 
@@ -178,6 +188,21 @@ TIMER_CALLBACK_MEMBER(sti3400_device::decode_tick)
 	m_decode_timer->adjust(frame_rate > 0.0
 		? attotime::from_double(1.0 / frame_rate)
 		: attotime::from_hz(25));
+}
+
+void sti3400_device::vblank_w(int state)
+{
+	if (!state)
+		return;
+
+	if (m_decoded_frame_pending)
+	{
+		std::copy_n(m_decoded_frame.get(), MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT, m_video_frame.get());
+		m_video_width = m_decoded_width;
+		m_video_height = m_decoded_height;
+		m_video_valid = true;
+		m_decoded_frame_pending = false;
+	}
 }
 
 void sti3400_device::stream_byte_w(u8 data)

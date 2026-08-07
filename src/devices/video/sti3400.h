@@ -19,6 +19,7 @@ public:
 
 	u16 read(offs_t offset, u16 mem_mask = ~0);
 	void write(offs_t offset, u16 data, u16 mem_mask = ~0);
+	void vblank_w(int state);
 
 	bool video_valid() const { return m_video_valid; }
 	u16 video_width() const { return m_video_width; }
@@ -58,6 +59,7 @@ private:
 	u64 m_event_position[EVENT_COUNT];
 	u8 m_event_code[EVENT_COUNT];
 	std::unique_ptr<u32[]> m_video_frame;
+	std::unique_ptr<u32[]> m_decoded_frame;
 	plm_buffer_t *m_decode_buffer;
 	plm_video_t *m_video_decoder;
 	emu_timer *m_decode_timer;
@@ -70,6 +72,8 @@ private:
 	u16 m_decode_staging_count;
 	u16 m_video_width;
 	u16 m_video_height;
+	u16 m_decoded_width;
+	u16 m_decoded_height;
 	u16 m_event_head;
 	u16 m_event_tail;
 	u16 m_event_count;
@@ -79,6 +83,7 @@ private:
 	bool m_irq_suppressed;
 	bool m_irq_state;
 	bool m_video_valid;
+	bool m_decoded_frame_pending;
 	bool m_decode_has_sequence_header;
 	bool m_decode_sequence_ended;
 };

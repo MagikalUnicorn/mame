@@ -490,6 +490,7 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	screen.set_raw(15000000, 960, 0, 768, 312, 32, 312);
 	screen.set_video_attributes(VIDEO_UPDATE_SCANLINE);
 	screen.set_screen_update(FUNC(bfm_cobra3_state::screen_update));
+	screen.screen_vblank().set(m_sti3400, FUNC(sti3400_device::vblank_w));
 
 	PALETTE(config, m_palette).set_entries(256);
 
