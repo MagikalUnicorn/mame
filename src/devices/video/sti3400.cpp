@@ -11,6 +11,8 @@
 #include "emu.h"
 #include "sti3400.h"
 
+#include "util/multibyte.h"
+
 #define PLM_NO_STDIO
 #include "pl_mpeg/pl_mpeg.h"
 
@@ -238,10 +240,7 @@ void sti3400_device::stream_byte_w(u8 data)
 				m_decode_stream_base = m_fifo_write - MPEG_START_CODE_BYTES;
 				m_decode_stream_written = 0;
 				// Re-seed PL_MPEG with the 00 00 01 B3 sequence-header start code.
-				m_decode_staging[0] = 0x00;
-				m_decode_staging[1] = 0x00;
-				m_decode_staging[2] = 0x01;
-				m_decode_staging[3] = MPEG_SEQUENCE_HEADER_CODE;
+				put_u32be(m_decode_staging, MPEG_START_CODE_PREFIX | MPEG_SEQUENCE_HEADER_CODE);
 				m_decode_staging_count = MPEG_START_CODE_BYTES;
 			}
 			else

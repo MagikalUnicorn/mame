@@ -33,31 +33,31 @@ protected:
 
 private:
 	// STi3400 host-interface register addresses from the data sheet.
-	static constexpr unsigned REG_CDF = 0x00;
-	static constexpr unsigned REG_HDF = 0x02;
-	static constexpr unsigned REG_HDP = 0x04;
-	static constexpr unsigned REG_STA = 0x08;
-	static constexpr unsigned REG_CTL = 0x0a;
-	static constexpr unsigned REG_ITM = 0x0e;
-	static constexpr unsigned REG_ITS = 0x10;
-	static constexpr unsigned REG_HDS = 0x12;
-	static constexpr unsigned REG_INS = 0x14;
-	static constexpr unsigned REG_BBB = 0x16;
-	static constexpr unsigned REG_BBL = 0x22;
-	static constexpr unsigned REG_BBT = 0x32;
+	static constexpr unsigned REG_CDF = 0x00; // compressed data FIFO
+	static constexpr unsigned REG_HDF = 0x02; // header data FIFO
+	static constexpr unsigned REG_HDP = 0x04; // header data position
+	static constexpr unsigned REG_STA = 0x08; // decoder status
+	static constexpr unsigned REG_CTL = 0x0a; // decoder control
+	static constexpr unsigned REG_ITM = 0x0e; // interrupt mask
+	static constexpr unsigned REG_ITS = 0x10; // interrupt status
+	static constexpr unsigned REG_HDS = 0x12; // header data search command
+	static constexpr unsigned REG_INS = 0x14; // next decoding instruction
+	static constexpr unsigned REG_BBB = 0x16; // bit-buffer bottom threshold
+	static constexpr unsigned REG_BBL = 0x22; // current bit-buffer level
+	static constexpr unsigned REG_BBT = 0x32; // bit-buffer top threshold
 
-	static constexpr u16 STA_SCH = 0x0001;
-	static constexpr u16 STA_HFE = 0x0004;
-	static constexpr u16 STA_BBF = 0x0008;
-	static constexpr u16 STA_BBE = 0x0010;
-	static constexpr u16 STA_PID = 0x0200;
-	static constexpr u16 STA_HFF = 0x1000;
-	static constexpr u16 STA_RESET = STA_PID | STA_BBE | STA_HFE;
+	static constexpr u16 STA_SCH = 0x0001; // start-code hit
+	static constexpr u16 STA_HFE = 0x0004; // header FIFO empty
+	static constexpr u16 STA_BBF = 0x0008; // bit buffer nearly full
+	static constexpr u16 STA_BBE = 0x0010; // bit buffer nearly empty
+	static constexpr u16 STA_PID = 0x0200; // decoding pipeline idle
+	static constexpr u16 STA_HFF = 0x1000; // header FIFO full
+	static constexpr u16 STA_RESET = STA_PID | STA_BBE | STA_HFE; // hard-reset status
 
-	static constexpr u16 CTL_EDC = 0x0001;
-	static constexpr u16 CTL_SRS = 0x0002;
-	static constexpr u16 CTL_DVS = 0x0080;
-	static constexpr u16 INS_WAIT = 0x0004;
+	static constexpr u16 CTL_EDC = 0x0001; // enable decoding
+	static constexpr u16 CTL_SRS = 0x0002; // soft reset
+	static constexpr u16 CTL_DVS = 0x0080; // disable VSYNC-triggered task start
+	static constexpr u16 INS_WAIT = 0x0004; // inhibit DSYNC, decoding and header search
 
 	// The currently implemented portion of the host interface uses six address bits.
 	static constexpr unsigned REGISTER_ADDRESS_BITS = 6;
