@@ -67,7 +67,7 @@ private:
 	required_device<mc68340_dma_module_device> m_dma;
 
 	void update_ipl();
-	void internal_vectors_r(address_map &map) ATTR_COLD;
+	void cpu_space_map(address_map &map) ATTR_COLD;
 	uint8_t int_ack(offs_t offset);
 
 	TIMER_CALLBACK_MEMBER(periodic_interrupt_timer_callback);
@@ -80,6 +80,7 @@ private:
 
 	int calc_cs(offs_t address) const;
 	int get_timer_index(mc68340_timer_module_device *timer) { return (timer == m_timer[0].target()) ? 0 : 1; }
+	bool is_mbar_access(offs_t address) const;
 
 	int m_currentcs;
 	uint32_t m_clock_mode;
@@ -106,8 +107,6 @@ private:
 	// Clock/VCO setting TODO: support external clock with PLL and Limp mode
 	void set_modck(int state);
 	void extal_w(int state);
-
-	void m68340_internal_map(address_map &map) ATTR_COLD;
 
 	/* 68340 peripheral modules */
 	m68340_sim*    m_m68340SIM;
