@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders:David Haywood, James Wallace, blueonesarefaster
+// copyright-holders:MagikalUnicorn
 
 #ifndef MAME_VIDEO_STI3400_H
 #define MAME_VIDEO_STI3400_H

@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders:David Haywood, James Wallace, blueonesarefaster
+// copyright-holders:MagikalUnicorn
 
 /*
  * Texas Instruments TMS320AV110 MPEG-1 audio decoder (preliminary)

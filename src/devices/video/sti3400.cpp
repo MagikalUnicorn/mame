@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders:David Haywood, James Wallace, blueonesarefaster
+// copyright-holders:MagikalUnicorn
 
 /*
  * SGS-Thomson STi3400 MPEG-1 video decoder (preliminary)

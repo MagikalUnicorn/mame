@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders:David Haywood, James Wallace, blueonesarefaster
+// copyright-holders:MagikalUnicorn
 
 #ifndef MAME_SOUND_TMS320AV110_H
 #define MAME_SOUND_TMS320AV110_H
