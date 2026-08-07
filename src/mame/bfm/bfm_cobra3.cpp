@@ -58,11 +58,6 @@ public:
 	void bfm_cobra3(machine_config &config) ATTR_COLD;
 
 protected:
-	static constexpr unsigned LAMP_LATCH_BITS = 16; // Width of the external lamp latch.
-	static constexpr unsigned LAMP_PORT_A_BITS = 8; // Width of MC68340 port A.
-	static constexpr unsigned LAMP_PORT_A_BASE = LAMP_LATCH_BITS; // First port A lamp number.
-	static constexpr unsigned LAMP_COUNT = LAMP_PORT_A_BASE + LAMP_PORT_A_BITS;
-
 	// devices
 	required_device<m68340_cpu_device> m_maincpu;
 	required_region_ptr<uint16_t> m_cpuregion;
@@ -76,7 +71,7 @@ protected:
 	required_ioport_array<5> m_strobein;
 	required_ioport m_iostatus;
 	optional_device<meters_device> m_meters;
-	output_finder<LAMP_COUNT> m_lamps;
+	output_finder<24> m_lamps;
 	required_device<nscsi_bus_device> m_scsibus;
 	required_device<ncr5380_device> m_scsic;
 	required_device<watchdog_timer_device> m_watchdog;
@@ -111,11 +106,11 @@ protected:
 
 void bfm_cobra3_state::update_lamps()
 {
-	for (unsigned i = 0; i < LAMP_LATCH_BITS; i++)
+	for (unsigned i = 0; i < 16; i++)
 		m_lamps[i] = BIT(m_lamp_latch, i);
 
-	for (unsigned i = 0; i < LAMP_PORT_A_BITS; i++)
-		m_lamps[LAMP_PORT_A_BASE + i] = BIT(m_lamp_port_a, i);
+	for (unsigned i = 0; i < 8; i++)
+		m_lamps[16 + i] = BIT(m_lamp_port_a, i);
 }
 
 void bfm_cobra3_state::lamp_latch_w(uint16_t data, uint16_t mem_mask)
