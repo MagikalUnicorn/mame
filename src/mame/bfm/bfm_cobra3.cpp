@@ -72,7 +72,7 @@ protected:
 	required_ioport_array<5> m_strobein;
 	required_ioport m_iostatus;
 	required_device<meters_device> m_meters;
-	output_finder<24> m_lamps;
+	output_finder<16> m_lamps;
 	required_device<nscsi_bus_device> m_scsibus;
 	required_device<ncr5380_device> m_scsic;
 	required_device<watchdog_timer_device> m_watchdog;
@@ -84,13 +84,11 @@ protected:
 	uint8_t m_vol_clock;
 	uint8_t m_volume;
 	uint16_t m_lamp_latch;
-	uint8_t m_lamp_port_a;
 
 	virtual void machine_start() override ATTR_COLD;
 
 	void volume_control(uint8_t direction, uint8_t clock);
 	void lamp_latch_w(uint16_t data, uint16_t mem_mask);
-	void lamp_port_a_w(uint8_t data);
 	void update_lamps();
 	void av110_reset_strobe_w(u8 data);
 	uint16_t mem_r(offs_t offset, uint16_t mem_mask = ~0);
@@ -109,20 +107,11 @@ void bfm_cobra3_state::update_lamps()
 {
 	for (unsigned i = 0; i < 16; i++)
 		m_lamps[i] = BIT(m_lamp_latch, i);
-
-	for (unsigned i = 0; i < 8; i++)
-		m_lamps[16 + i] = BIT(m_lamp_port_a, i);
 }
 
 void bfm_cobra3_state::lamp_latch_w(uint16_t data, uint16_t mem_mask)
 {
 	COMBINE_DATA(&m_lamp_latch);
-	update_lamps();
-}
-
-void bfm_cobra3_state::lamp_port_a_w(uint8_t data)
-{
-	m_lamp_port_a = data;
 	update_lamps();
 }
 
@@ -448,14 +437,12 @@ void bfm_cobra3_state::machine_start()
 	m_vol_clock = 0;
 	m_volume = 0;
 	m_lamp_latch = 0;
-	m_lamp_port_a = 0;
 	m_mainram = make_unique_clear<uint16_t[]>((1024 * 16) / 2);
 	m_nvram->set_base(m_mainram.get(), 1024 * 16);
 
 	save_item(NAME(m_vol_clock));
 	save_item(NAME(m_volume));
 	save_item(NAME(m_lamp_latch));
-	save_item(NAME(m_lamp_port_a));
 	machine().save().register_postload(save_prepost_delegate(FUNC(bfm_cobra3_state::update_lamps), this));
 }
 
@@ -535,7 +522,6 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 {
 	M68340(config, m_maincpu, 16000000);
 	m_maincpu->set_addrmap(AS_PROGRAM, &bfm_cobra3_state::bfm_cobra3_map);
-	m_maincpu->pa_out_callback().set(FUNC(bfm_cobra3_state::lamp_port_a_w));
 
 	NVRAM(config, "nvram", nvram_device::DEFAULT_ALL_0);
 

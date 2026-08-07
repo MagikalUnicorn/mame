@@ -19,67 +19,70 @@ copyright-holders:MagikalUnicorn
 		</rect>
 	</element>
 
-	<element name="external_low_label">
-		<text string="EXTERNAL LATCH 0-7">
-			<color red="0.85" green="0.85" blue="0.85" />
-		</text>
-	</element>
-
-	<element name="external_high_label">
-		<text string="EXTERNAL LATCH 8-15">
-			<color red="0.85" green="0.85" blue="0.85" />
-		</text>
-	</element>
-
-	<element name="port_a_label">
-		<text string="MC68340 PORT A 16-23">
-			<color red="0.85" green="0.85" blue="0.85" />
-		</text>
-	</element>
-
 	<element name="lamp_label_0">
-		<text string="0 A LEFT">
+		<text string="A LEFT">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
 	<element name="lamp_label_1">
-		<text string="1 B LEFT">
+		<text string="B LEFT">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
 	<element name="lamp_label_2">
-		<text string="2 C LEFT">
-			<color red="0.00" green="0.00" blue="0.00" />
-		</text>
-	</element>
-	<element name="lamp_label_3">
-		<text string="3">
+		<text string="C LEFT">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
 	<element name="lamp_label_4">
-		<text string="4 START">
+		<text string="START">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
 	<element name="lamp_label_5">
-		<text string="5 C RIGHT">
+		<text string="C RIGHT">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
 	<element name="lamp_label_6">
-		<text string="6 B RIGHT">
+		<text string="B RIGHT">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
 	<element name="lamp_label_7">
-		<text string="7 A RIGHT">
+		<text string="A RIGHT">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
 
-	<repeat count="16">
-		<param name="n" start="8" increment="1" />
+	<element name="lamp_label_8">
+		<text string="LEFT">
+			<color red="0.00" green="0.00" blue="0.00" />
+		</text>
+	</element>
+	<element name="lamp_label_9">
+		<text string="RIGHT">
+			<color red="0.00" green="0.00" blue="0.00" />
+		</text>
+	</element>
+	<element name="lamp_label_10">
+		<text string="UP">
+			<color red="0.00" green="0.00" blue="0.00" />
+		</text>
+	</element>
+	<element name="lamp_label_11">
+		<text string="DOWN">
+			<color red="0.00" green="0.00" blue="0.00" />
+		</text>
+	</element>
+	<element name="lamp_label_12">
+		<text string="SELECT">
+			<color red="0.00" green="0.00" blue="0.00" />
+		</text>
+	</element>
+
+	<repeat count="3">
+		<param name="n" start="13" increment="1" />
 		<element name="lamp_label_~n~">
 			<text string="~n~">
 				<color red="0.00" green="0.00" blue="0.00" />
@@ -93,32 +96,40 @@ copyright-holders:MagikalUnicorn
 		</screen>
 
 		<element ref="panel">
-			<bounds x="0" y="582" width="768" height="68" />
-		</element>
-
-		<element ref="external_low_label">
-			<bounds x="4" y="588" width="136" height="12" />
-		</element>
-		<element ref="external_high_label">
-			<bounds x="4" y="609" width="136" height="12" />
-		</element>
-		<element ref="port_a_label">
-			<bounds x="4" y="630" width="136" height="12" />
+			<bounds x="0" y="582" width="768" height="47" />
 		</element>
 
 		<repeat count="3">
-			<param name="s" start="0" increment="8" />
-			<param name="y" start="586" increment="21" />
-			<repeat count="8">
-				<param name="n" start="~s~" increment="1" />
-				<param name="x" start="146" increment="77" />
-				<element name="lamp~n~" ref="lamp">
-					<bounds x="~x~" y="~y~" width="70" height="16" />
-				</element>
-				<element ref="lamp_label_~n~">
-					<bounds x="~x~" y="~y~" width="70" height="16" />
-				</element>
-			</repeat>
+			<param name="n" start="0" increment="1" />
+			<param name="x" start="80" increment="77" />
+			<element name="lamp~n~" ref="lamp">
+				<bounds x="~x~" y="586" width="70" height="16" />
+			</element>
+			<element ref="lamp_label_~n~">
+				<bounds x="~x~" y="586" width="70" height="16" />
+			</element>
+		</repeat>
+
+		<repeat count="4">
+			<param name="n" start="4" increment="1" />
+			<param name="x" start="388" increment="77" />
+			<element name="lamp~n~" ref="lamp">
+				<bounds x="~x~" y="586" width="70" height="16" />
+			</element>
+			<element ref="lamp_label_~n~">
+				<bounds x="~x~" y="586" width="70" height="16" />
+			</element>
+		</repeat>
+
+		<repeat count="8">
+			<param name="n" start="8" increment="1" />
+			<param name="x" start="80" increment="77" />
+			<element name="lamp~n~" ref="lamp">
+				<bounds x="~x~" y="607" width="70" height="16" />
+			</element>
+			<element ref="lamp_label_~n~">
+				<bounds x="~x~" y="607" width="70" height="16" />
+			</element>
 		</repeat>
 	</view>
 
