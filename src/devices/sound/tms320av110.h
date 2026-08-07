@@ -21,18 +21,16 @@ public:
 protected:
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
-	virtual void device_stop() override ATTR_COLD;
 	virtual void sound_stream_update(sound_stream &stream) override;
 
 private:
 	struct decoder_state;
 
 	void decoder_create();
-	void decoder_destroy();
 	void decoder_reset();
-	void decoder_flush();
 	bool decode_frame();
 	void fifo_w(u8 data);
+	void update_req();
 
 	sound_stream *m_stream;
 	devcb_write_line m_req_cb;

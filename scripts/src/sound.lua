@@ -82,7 +82,6 @@ end
 
 if SOUNDS["TMS320AV110"] then
 	files {
-		MAME_DIR .. "3rdparty/pl_mpeg/pl_mpeg.cpp",
 		MAME_DIR .. "src/devices/sound/tms320av110.cpp",
 		MAME_DIR .. "src/devices/sound/tms320av110.h",
 	}

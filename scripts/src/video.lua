@@ -1566,7 +1566,6 @@ end
 
 if VIDEOS["STI3400"] then
 	files {
-		MAME_DIR .. "3rdparty/pl_mpeg/pl_mpeg.cpp",
 		MAME_DIR .. "src/devices/video/sti3400.cpp",
 		MAME_DIR .. "src/devices/video/sti3400.h",
 	}

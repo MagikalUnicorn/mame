@@ -6,10 +6,6 @@
 
 #pragma once
 
-struct plm_buffer_t;
-struct plm_video_t;
-
-
 class sti3400_device : public device_t
 {
 public:
@@ -21,15 +17,15 @@ public:
 	void write(offs_t offset, u16 data, u16 mem_mask = ~0);
 	void vblank_w(int state);
 
-	bool video_valid() const { return m_video_valid; }
-	u16 video_width() const { return m_video_width; }
-	u16 video_height() const { return m_video_height; }
-	u32 video_pixel(unsigned x, unsigned y) const { return m_video_frame[(y * MAX_VIDEO_WIDTH) + x]; }
+	// Picture reconstruction is not yet implemented.
+	bool video_valid() const { return false; }
+	u16 video_width() const { return 0; }
+	u16 video_height() const { return 0; }
+	u32 video_pixel(unsigned, unsigned) const { return 0; }
 
 protected:
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
-	virtual void device_stop() override ATTR_COLD;
 
 private:
 	// STi3400 host-interface register addresses from the data sheet.
@@ -79,30 +75,18 @@ private:
 	static constexpr u32 MPEG_START_CODE_PREFIX = 0x00000100U;
 	static constexpr u8 MPEG_PICTURE_START_CODE = 0x00;
 	static constexpr u8 MPEG_NON_SLICE_CODE_MIN = 0xb0;
-	static constexpr u8 MPEG_SEQUENCE_HEADER_CODE = 0xb3;
 	static constexpr u8 MPEG_SEQUENCE_END_CODE = 0xb7;
-	static constexpr unsigned MPEG_START_CODE_BYTES = 4;
 
-	// These tune the high-level software decoder and are not hardware FIFO capacities.
-	// Event and lookahead capacity allows the host to parse headers while the input stream continues to arrive.
+	// Event and lookahead capacity allows the host to parse headers while input continues to arrive.
 	static constexpr unsigned START_CODE_EVENT_COUNT = 256;
 	static constexpr unsigned HEADER_LOOKAHEAD_BYTES = 256;
-	// Writes are batched for PL_MPEG, whose initial allocation grows automatically as required.
-	static constexpr unsigned DECODE_STAGING_BYTES = 2 * 1024;
-	static constexpr unsigned DECODE_BUFFER_INITIAL_BYTES = 64 * 1024;
-	// Use the PAL frame rate until the MPEG sequence header supplies one.
+	// Use the PAL frame rate for the preliminary compressed-data consumption model.
 	static constexpr unsigned DEFAULT_FRAME_RATE = 25;
-	// The current implementation provides an SD output surface for the supported MPEG-1 streams.
-	static constexpr unsigned MAX_VIDEO_WIDTH = 720;
-	static constexpr unsigned MAX_VIDEO_HEIGHT = 576;
 
 	static_assert(!(STREAM_HISTORY_SIZE & (STREAM_HISTORY_SIZE - 1)), "stream history size must be a power of two");
 	static_assert(!(START_CODE_EVENT_COUNT & (START_CODE_EVENT_COUNT - 1)), "event count must be a power of two");
 
 	void stream_byte_w(u8 data);
-	void decoder_create();
-	void decoder_destroy();
-	void decoder_flush();
 	void decoder_soft_reset();
 	TIMER_CALLBACK_MEMBER(decode_tick);
 	void queue_start_code(u64 position, u8 code);
@@ -118,25 +102,14 @@ private:
 
 	u16 m_registers[REGISTER_COUNT];
 	u8 m_fifo[STREAM_HISTORY_SIZE];
-	u8 m_decode_staging[DECODE_STAGING_BYTES];
 	u64 m_event_position[START_CODE_EVENT_COUNT];
 	u8 m_event_code[START_CODE_EVENT_COUNT];
-	std::unique_ptr<u32[]> m_video_frame;
-	std::unique_ptr<u32[]> m_decoded_frame;
-	plm_buffer_t *m_decode_buffer;
-	plm_video_t *m_video_decoder;
 	emu_timer *m_decode_timer;
 
 	u64 m_fifo_write;
 	u64 m_fifo_read;
-	u64 m_decode_stream_base;
-	u64 m_decode_stream_written;
+	u64 m_decode_position;
 	u32 m_start_code_shift;
-	u16 m_decode_staging_count;
-	u16 m_video_width;
-	u16 m_video_height;
-	u16 m_decoded_width;
-	u16 m_decoded_height;
 	u16 m_event_head;
 	u16 m_event_tail;
 	u16 m_event_count;
@@ -144,10 +117,6 @@ private:
 	u16 m_status;
 	bool m_event_active;
 	bool m_irq_state;
-	bool m_video_valid;
-	bool m_decoded_frame_pending;
-	bool m_decode_has_sequence_header;
-	bool m_decode_sequence_ended;
 };
 
 DECLARE_DEVICE_TYPE(STI3400, sti3400_device)

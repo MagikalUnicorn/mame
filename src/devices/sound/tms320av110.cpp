@@ -6,8 +6,8 @@
  *
  * The implemented subset consists of the host register window, memory-mapped
  * compressed-data input, reset-controlled REQ signalling, and MPEG-1 Audio
- * Layer II reconstruction using PL_MPEG.  Input-buffer-full backpressure and
- * other control/status register behaviour are not yet implemented.
+ * Layer II reconstruction.  Input-buffer-full backpressure and other
+ * control/status register behaviour are not yet fully implemented.
  *
  * Reference: Texas Instruments data sheet SCSS013C, revised August 1995.
  */
@@ -15,8 +15,7 @@
 #include "emu.h"
 #include "tms320av110.h"
 
-#define PLM_NO_STDIO
-#include "pl_mpeg/pl_mpeg.h"
+#include "mpeg_audio.h"
 
 namespace {
 
@@ -32,11 +31,22 @@ constexpr unsigned LEFT_CHANNEL = 0;
 constexpr unsigned RIGHT_CHANNEL = 1;
 constexpr unsigned OUTPUT_CHANNELS = 2;
 
-// Used for sound scheduling until PL_MPEG finds a header and reports the stream rate.
+// Used for sound scheduling until an MPEG header supplies the stream rate.
 constexpr u32 INITIAL_SAMPLE_RATE = 44'100;
 
-// Match the AV110's documented 256-byte internal input buffer when batching host writes.
-constexpr unsigned INPUT_WRITE_BATCH_BYTES = 1U << 8;
+// MPEG-1 Layer II produces 1,152 samples per channel for each decoded frame.
+constexpr unsigned MPEG_LAYER_II_SAMPLES_PER_FRAME = 1'152;
+
+// A Layer II frame is largest at the maximum bit rate and minimum sample rate.
+constexpr unsigned MAX_MPEG1_LAYER_II_BIT_RATE = 384'000;
+constexpr unsigned MIN_MPEG1_SAMPLE_RATE = 32'000;
+constexpr unsigned MPEG1_LAYER_II_FRAME_SCALE = 144;
+constexpr unsigned MPEG_FRAME_PADDING_BYTES = 1;
+constexpr unsigned MAX_MPEG_AUDIO_FRAME_BYTES =
+	(MPEG1_LAYER_II_FRAME_SCALE * MAX_MPEG1_LAYER_II_BIT_RATE / MIN_MPEG1_SAMPLE_RATE) + MPEG_FRAME_PADDING_BYTES;
+
+// Retain two maximum-sized frames so the frame-based decoder can accept streaming input.
+constexpr unsigned INPUT_BUFFER_BYTES = 2 * MAX_MPEG_AUDIO_FRAME_BYTES;
 
 } // anonymous namespace
 
@@ -44,13 +54,14 @@ DEFINE_DEVICE_TYPE(TMS320AV110, tms320av110_device, "tms320av110", "Texas Instru
 
 struct tms320av110_device::decoder_state
 {
-	plm_buffer_t *buffer = nullptr;
-	plm_audio_t *audio = nullptr;
-	std::array<u8, INPUT_WRITE_BATCH_BYTES> input_staging{};
-	std::array<float, PLM_AUDIO_SAMPLES_PER_FRAME * OUTPUT_CHANNELS> pcm{};
-	unsigned input_staging_count = 0;
+	std::array<u8, INPUT_BUFFER_BYTES> input{};
+	std::array<s16, MPEG_LAYER_II_SAMPLES_PER_FRAME * OUTPUT_CHANNELS> pcm{};
+	std::unique_ptr<mpeg_audio> decoder;
+	unsigned input_bytes = 0;
+	unsigned input_bit_position = 0;
 	unsigned pcm_position = 0;
 	unsigned pcm_count = 0;
+	unsigned pcm_channels = 0;
 };
 
 tms320av110_device::tms320av110_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock) :
@@ -70,11 +81,13 @@ void tms320av110_device::device_start()
 	m_stream = stream_alloc(0, OUTPUT_CHANNELS, INITIAL_SAMPLE_RATE);
 	decoder_create();
 
-	save_item(NAME(m_decoder->input_staging));
+	save_item(NAME(m_decoder->input));
 	save_item(NAME(m_decoder->pcm));
-	save_item(NAME(m_decoder->input_staging_count));
+	save_item(NAME(m_decoder->input_bytes));
+	save_item(NAME(m_decoder->input_bit_position));
 	save_item(NAME(m_decoder->pcm_position));
 	save_item(NAME(m_decoder->pcm_count));
+	save_item(NAME(m_decoder->pcm_channels));
 	save_item(NAME(m_reset_asserted));
 }
 
@@ -82,28 +95,12 @@ void tms320av110_device::device_reset()
 {
 	decoder_reset();
 	m_reset_asserted = true;
-	m_req_cb(ASSERT_LINE); // REQ is high (not requesting data) throughout reset.
-}
-
-void tms320av110_device::device_stop()
-{
-	decoder_destroy();
+	update_req();
 }
 
 void tms320av110_device::decoder_create()
 {
-	// PL_MPEG's ring buffer grows as required and discards bytes after decoding.
-	m_decoder->buffer = plm_buffer_create_with_capacity(PLM_BUFFER_DEFAULT_SIZE);
-	m_decoder->audio = plm_audio_create_with_buffer(m_decoder->buffer, true);
-}
-
-void tms320av110_device::decoder_destroy()
-{
-	if (m_decoder->audio)
-		plm_audio_destroy(m_decoder->audio);
-
-	m_decoder->audio = nullptr;
-	m_decoder->buffer = nullptr;
+	m_decoder->decoder = std::make_unique<mpeg_audio>(m_decoder->input.data(), mpeg_audio::L2, false, 0);
 }
 
 void tms320av110_device::decoder_reset()
@@ -114,37 +111,51 @@ void tms320av110_device::decoder_reset()
 		m_stream->set_sample_rate(INITIAL_SAMPLE_RATE);
 	}
 
-	decoder_destroy();
-	decoder_create();
-	m_decoder->input_staging.fill(0);
-	m_decoder->pcm.fill(0.0F);
-	m_decoder->input_staging_count = 0;
+	m_decoder->input.fill(0);
+	m_decoder->pcm.fill(0);
+	m_decoder->input_bytes = 0;
+	m_decoder->input_bit_position = 0;
 	m_decoder->pcm_position = 0;
 	m_decoder->pcm_count = 0;
-}
-
-void tms320av110_device::decoder_flush()
-{
-	if (!m_decoder->input_staging_count)
-		return;
-
-	plm_buffer_write(m_decoder->buffer, m_decoder->input_staging.data(), m_decoder->input_staging_count);
-	m_decoder->input_staging_count = 0;
+	m_decoder->pcm_channels = 0;
+	decoder_create();
 }
 
 bool tms320av110_device::decode_frame()
 {
-	plm_samples_t *const samples = plm_audio_decode(m_decoder->audio);
-	if (!samples)
+	int position = m_decoder->input_bit_position;
+	int sample_count = 0;
+	int sample_rate = 0;
+	int channels = 0;
+	if (!m_decoder->decoder->decode_buffer(
+			position,
+			m_decoder->input_bytes * 8,
+			m_decoder->pcm.data(),
+			sample_count,
+			sample_rate,
+			channels))
+	{
 		return false;
+	}
 
-	// PL_MPEG always returns one 1,152-sample MPEG-1 Layer II frame here.
-	assert(samples->count <= PLM_AUDIO_SAMPLES_PER_FRAME);
-	std::copy_n(samples->interleaved, samples->count * OUTPUT_CHANNELS, m_decoder->pcm.begin());
+	assert(sample_count <= MPEG_LAYER_II_SAMPLES_PER_FRAME);
+	assert((channels == 1) || (channels == OUTPUT_CHANNELS));
 	m_decoder->pcm_position = 0;
-	m_decoder->pcm_count = samples->count;
+	m_decoder->pcm_count = sample_count;
+	m_decoder->pcm_channels = channels;
 
-	u32 const sample_rate = plm_audio_get_samplerate(m_decoder->audio);
+	const unsigned bytes_consumed = position / 8;
+	if (bytes_consumed)
+	{
+		std::move(
+			m_decoder->input.begin() + bytes_consumed,
+			m_decoder->input.begin() + m_decoder->input_bytes,
+			m_decoder->input.begin());
+		m_decoder->input_bytes -= bytes_consumed;
+	}
+	m_decoder->input_bit_position = position & 7;
+	update_req();
+
 	if (sample_rate && (sample_rate != m_stream->sample_rate()))
 		m_stream->set_sample_rate(sample_rate);
 
@@ -153,20 +164,30 @@ bool tms320av110_device::decode_frame()
 
 void tms320av110_device::fifo_w(u8 data)
 {
-	m_decoder->input_staging[m_decoder->input_staging_count++] = data;
-	if (m_decoder->input_staging_count == m_decoder->input_staging.size())
-		decoder_flush();
+	if (m_decoder->input_bytes == m_decoder->input.size())
+	{
+		logerror("%s: compressed-audio input overflow\n", machine().describe_context());
+		return;
+	}
+
+	m_decoder->input[m_decoder->input_bytes++] = data;
+	update_req();
+}
+
+void tms320av110_device::update_req()
+{
+	// REQ is active low and is held inactive during reset or while the input buffer is full.
+	m_req_cb((m_reset_asserted || (m_decoder->input_bytes == m_decoder->input.size())) ? ASSERT_LINE : CLEAR_LINE);
 }
 
 void tms320av110_device::reset_w(int state)
 {
-	bool const asserted = !state;
+	const bool asserted = !state;
 	if (asserted && !m_reset_asserted)
 		decoder_reset();
 
 	m_reset_asserted = asserted;
-	// Reset timing is not yet modelled; REQ becomes active as soon as RESET is released.
-	m_req_cb(m_reset_asserted ? ASSERT_LINE : CLEAR_LINE);
+	update_req();
 }
 
 u8 tms320av110_device::read(offs_t offset)
@@ -196,8 +217,6 @@ void tms320av110_device::write(offs_t offset, u8 data)
 
 void tms320av110_device::sound_stream_update(sound_stream &stream)
 {
-	decoder_flush();
-
 	for (int sample = 0; sample < stream.samples(); sample++)
 	{
 		if ((m_decoder->pcm_position == m_decoder->pcm_count) && !decode_frame())
@@ -207,9 +226,13 @@ void tms320av110_device::sound_stream_update(sound_stream &stream)
 			continue;
 		}
 
-		unsigned const position = m_decoder->pcm_position * OUTPUT_CHANNELS;
-		stream.put(LEFT_CHANNEL, sample, m_decoder->pcm[position + LEFT_CHANNEL]);
-		stream.put(RIGHT_CHANNEL, sample, m_decoder->pcm[position + RIGHT_CHANNEL]);
+		const unsigned position = m_decoder->pcm_position * m_decoder->pcm_channels;
+		const s16 left = m_decoder->pcm[position];
+		const s16 right = (m_decoder->pcm_channels == OUTPUT_CHANNELS)
+			? m_decoder->pcm[position + RIGHT_CHANNEL]
+			: left;
+		stream.put_int(LEFT_CHANNEL, sample, left, 32'768);
+		stream.put_int(RIGHT_CHANNEL, sample, right, 32'768);
 		m_decoder->pcm_position++;
 	}
 }
