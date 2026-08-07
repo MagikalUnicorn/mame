@@ -354,6 +354,11 @@ void sti3400_device::activate_event()
 			if (m_decode_position <= position)
 				return;
 		}
+		else if ((m_fifo_write - position) < HEADER_FIFO_BYTES)
+		{
+			// The software detector runs on CDF writes; defer the hit until HDF can supply a hardware-sized window.
+			return;
+		}
 
 		m_event_active = true;
 		m_fifo_read = position;
