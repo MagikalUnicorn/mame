@@ -10,6 +10,7 @@ class sti3400_device : public device_t
 {
 public:
 	sti3400_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock = 0);
+	virtual ~sti3400_device();
 
 	auto irq() { return m_irq_cb.bind(); }
 
@@ -17,11 +18,10 @@ public:
 	void write(offs_t offset, u16 data, u16 mem_mask = ~0);
 	void vblank_w(int state);
 
-	// Picture reconstruction is not yet implemented.
-	bool video_valid() const { return false; }
-	u16 video_width() const { return 0; }
-	u16 video_height() const { return 0; }
-	u32 video_pixel(unsigned, unsigned) const { return 0; }
+	bool video_valid() const;
+	u16 video_width() const;
+	u16 video_height() const;
+	u32 video_pixel(unsigned x, unsigned y) const;
 
 protected:
 	virtual void device_start() override ATTR_COLD;
@@ -55,39 +55,22 @@ private:
 	static constexpr u16 CTL_DVS = 0x0080; // disable VSYNC-triggered task start
 	static constexpr u16 INS_WAIT = 0x0004; // inhibit DSYNC, decoding and header search
 
-	// The currently implemented portion of the host interface uses six address bits.
-	static constexpr unsigned REGISTER_ADDRESS_BITS = 6;
-	static constexpr unsigned REGISTER_COUNT = 1U << REGISTER_ADDRESS_BITS;
-	static constexpr unsigned REGISTER_ADDRESS_MASK = REGISTER_COUNT - 1;
-
 	// Bit-buffer levels and thresholds are 14-bit counts of 256-byte units.
-	static constexpr unsigned BIT_BUFFER_LEVEL_BITS = 14;
-	static constexpr unsigned BIT_BUFFER_LEVEL_UNIT_BYTES = 256;
-	static constexpr unsigned BIT_BUFFER_LEVEL_BIAS_BYTES = 64;
-	static constexpr u16 BIT_BUFFER_LEVEL_MASK = (1U << BIT_BUFFER_LEVEL_BITS) - 1;
-	// This is stream history for header searches, not the STi3400's 512-bit CD FIFO.
-	static constexpr unsigned STREAM_HISTORY_SIZE = (BIT_BUFFER_LEVEL_MASK + 1U) * BIT_BUFFER_LEVEL_UNIT_BYTES;
-	// The header FIFO is 256 bits wide.
-	static constexpr unsigned HEADER_FIFO_BYTES = 256 / 8;
+	static constexpr u16 BIT_BUFFER_LEVEL_MASK = 0x3fff;
+	static constexpr unsigned BIT_BUFFER_LEVEL_UNIT_BYTES = 0x100;
+	static constexpr unsigned BIT_BUFFER_LEVEL_BIAS_BYTES = 0x40;
 
-	static constexpr u32 MPEG_START_CODE_SHIFT_RESET = ~u32(0);
-	static constexpr u32 MPEG_START_CODE_MASK = 0xffffff00U;
-	static constexpr u32 MPEG_START_CODE_PREFIX = 0x00000100U;
-	static constexpr u8 MPEG_PICTURE_START_CODE = 0x00;
-	static constexpr u8 MPEG_NON_SLICE_CODE_MIN = 0xb0;
-	static constexpr u8 MPEG_SEQUENCE_END_CODE = 0xb7;
+	// The hardware header FIFO is 256 bits wide.
+	static constexpr unsigned HEADER_FIFO_BYTES = 0x20;
 
-	// Event and lookahead capacity allows the host to parse headers while input continues to arrive.
+	// Software buffers cover the maximum amount representable by BBL.
+	static constexpr unsigned COMPRESSED_DATA_BUFFER_BYTES = 4U * 1024 * 1024;
 	static constexpr unsigned START_CODE_EVENT_COUNT = 256;
-	static constexpr unsigned HEADER_LOOKAHEAD_BYTES = 256;
-	// Use the PAL frame rate for the preliminary compressed-data consumption model.
-	static constexpr unsigned DEFAULT_FRAME_RATE = 25;
-
-	static_assert(!(STREAM_HISTORY_SIZE & (STREAM_HISTORY_SIZE - 1)), "stream history size must be a power of two");
-	static_assert(!(START_CODE_EVENT_COUNT & (START_CODE_EVENT_COUNT - 1)), "event count must be a power of two");
 
 	void stream_byte_w(u8 data);
 	void decoder_soft_reset();
+	void decoder_create();
+	bool decode_frame(bool &frame_valid);
 	TIMER_CALLBACK_MEMBER(decode_tick);
 	void queue_start_code(u64 position, u8 code);
 	void activate_event();
@@ -98,10 +81,13 @@ private:
 	void update_irq();
 	u8 stream_byte_r();
 
-	devcb_write_line m_irq_cb;
+	struct decoder_state;
 
-	u16 m_registers[REGISTER_COUNT];
-	u8 m_fifo[STREAM_HISTORY_SIZE];
+	devcb_write_line m_irq_cb;
+	std::unique_ptr<decoder_state> m_decoder;
+
+	u16 m_registers[0x40];
+	u8 m_fifo[COMPRESSED_DATA_BUFFER_BYTES];
 	u64 m_event_position[START_CODE_EVENT_COUNT];
 	u8 m_event_code[START_CODE_EVENT_COUNT];
 	emu_timer *m_decode_timer;

@@ -4,31 +4,76 @@
 /*
  * SGS-Thomson STi3400 MPEG-1 video decoder (preliminary)
  *
- * The host interface and start-code detector are implemented sufficiently for
- * Cobra 3 software.  MPEG-1 picture reconstruction is not yet implemented.
+ * The host interface, start-code detector and MPEG-1 picture reconstruction
+ * are implemented sufficiently for Cobra 3 software.
  */
 
 #include "emu.h"
 #include "sti3400.h"
+
+#include "mpeg_video.h"
 
 #define LOG_START_CODES (1U << 1)
 
 #define VERBOSE (0)
 #include "logmacro.h"
 
+namespace {
+
+constexpr u32 MPEG_START_CODE_SHIFT_RESET = ~u32(0);
+constexpr u32 MPEG_START_CODE_MASK = 0xffffff00U;
+constexpr u32 MPEG_START_CODE_PREFIX = 0x00000100U;
+constexpr u8 MPEG_PICTURE_START_CODE = 0x00;
+constexpr u8 MPEG_NON_SLICE_CODE_MIN = 0xb0;
+constexpr u8 MPEG_SEQUENCE_END_CODE = 0xb7;
+
+// Maximum dimensions for a constrained-parameters MPEG-1 sequence.
+constexpr unsigned MAX_VIDEO_WIDTH = 768;
+constexpr unsigned MAX_VIDEO_HEIGHT = 576;
+
+// Allow the host to inspect headers while compressed input continues to arrive.
+constexpr unsigned HEADER_LOOKAHEAD_BYTES = 256;
+
+// Used until the MPEG sequence header supplies a picture rate.
+constexpr unsigned FALLBACK_FRAME_RATE = 25;
+
+} // anonymous namespace
+
 
 DEFINE_DEVICE_TYPE(STI3400, sti3400_device, "sti3400", "SGS-Thomson STi3400 MPEG-1 Video Decoder")
+
+struct sti3400_device::decoder_state
+{
+	std::array<u8, COMPRESSED_DATA_BUFFER_BYTES> input{};
+	std::array<u32, 2 * MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT> video{};
+	std::unique_ptr<mpeg_video> decoder;
+	unsigned input_bytes = 0;
+	unsigned input_bit_position = 0;
+	unsigned display_buffer = 0;
+	unsigned decode_buffer = 1;
+	u16 width = 0;
+	u16 height = 0;
+	u16 decoded_width = 0;
+	u16 decoded_height = 0;
+	double frame_rate = FALLBACK_FRAME_RATE;
+	bool valid = false;
+	bool frame_pending = false;
+};
 
 sti3400_device::sti3400_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock) :
 	device_t(mconfig, STI3400, tag, owner, clock),
 	m_irq_cb(*this),
+	m_decoder(std::make_unique<decoder_state>()),
 	m_decode_timer(nullptr)
 {
 }
 
+sti3400_device::~sti3400_device() = default;
+
 void sti3400_device::device_start()
 {
 	m_decode_timer = timer_alloc(FUNC(sti3400_device::decode_tick), this);
+	decoder_create();
 
 	save_item(NAME(m_registers));
 	save_item(NAME(m_fifo));
@@ -45,6 +90,19 @@ void sti3400_device::device_start()
 	save_item(NAME(m_status));
 	save_item(NAME(m_event_active));
 	save_item(NAME(m_irq_state));
+	save_item(NAME(m_decoder->input));
+	save_item(NAME(m_decoder->video));
+	save_item(NAME(m_decoder->input_bytes));
+	save_item(NAME(m_decoder->input_bit_position));
+	save_item(NAME(m_decoder->display_buffer));
+	save_item(NAME(m_decoder->decode_buffer));
+	save_item(NAME(m_decoder->width));
+	save_item(NAME(m_decoder->height));
+	save_item(NAME(m_decoder->decoded_width));
+	save_item(NAME(m_decoder->decoded_height));
+	save_item(NAME(m_decoder->frame_rate));
+	save_item(NAME(m_decoder->valid));
+	save_item(NAME(m_decoder->frame_pending));
 }
 
 void sti3400_device::device_reset()
@@ -65,8 +123,22 @@ void sti3400_device::device_reset()
 	m_status = STA_RESET;
 	m_event_active = false;
 	m_irq_state = false;
+	m_decoder->input.fill(0);
+	m_decoder->video.fill(0);
+	m_decoder->input_bytes = 0;
+	m_decoder->input_bit_position = 0;
+	m_decoder->display_buffer = 0;
+	m_decoder->decode_buffer = 1;
+	m_decoder->width = 0;
+	m_decoder->height = 0;
+	m_decoder->decoded_width = 0;
+	m_decoder->decoded_height = 0;
+	m_decoder->frame_rate = FALLBACK_FRAME_RATE;
+	m_decoder->valid = false;
+	m_decoder->frame_pending = false;
+	decoder_create();
 	m_irq_cb(CLEAR_LINE);
-	m_decode_timer->adjust(attotime::from_hz(DEFAULT_FRAME_RATE));
+	m_decode_timer->adjust(attotime::from_hz(FALLBACK_FRAME_RATE));
 }
 
 void sti3400_device::decoder_soft_reset()
@@ -83,24 +155,103 @@ void sti3400_device::decoder_soft_reset()
 	m_event_tail = 0;
 	m_event_count = 0;
 	m_event_active = false;
+	m_decoder->input.fill(0);
+	m_decoder->video.fill(0);
+	m_decoder->input_bytes = 0;
+	m_decoder->input_bit_position = 0;
+	m_decoder->display_buffer = 0;
+	m_decoder->decode_buffer = 1;
+	m_decoder->width = 0;
+	m_decoder->height = 0;
+	m_decoder->decoded_width = 0;
+	m_decoder->decoded_height = 0;
+	m_decoder->frame_rate = FALLBACK_FRAME_RATE;
+	m_decoder->valid = false;
+	m_decoder->frame_pending = false;
+	decoder_create();
 	update_status();
+}
+
+void sti3400_device::decoder_create()
+{
+	m_decoder->decoder = std::make_unique<mpeg_video>(m_decoder->input.data());
+}
+
+bool sti3400_device::decode_frame(bool &frame_valid)
+{
+	int position = m_decoder->input_bit_position;
+	int width = m_decoder->decoded_width;
+	int height = m_decoder->decoded_height;
+	double frame_rate = m_decoder->frame_rate;
+	frame_valid = false;
+	if (!m_decoder->decoder->decode_buffer(
+			position,
+			m_decoder->input_bytes * 8,
+			m_decoder->video.data() + (m_decoder->decode_buffer * MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT),
+			MAX_VIDEO_WIDTH,
+			MAX_VIDEO_HEIGHT,
+			width,
+			height,
+			frame_rate,
+			frame_valid))
+	{
+		return false;
+	}
+
+	m_decoder->decoded_width = width;
+	m_decoder->decoded_height = height;
+	m_decoder->frame_rate = frame_rate;
+	if (frame_valid)
+		m_decoder->frame_pending = true;
+
+	const unsigned bytes_consumed = position / 8;
+	if (bytes_consumed)
+	{
+		std::move(
+			m_decoder->input.begin() + bytes_consumed,
+			m_decoder->input.begin() + m_decoder->input_bytes,
+			m_decoder->input.begin());
+		m_decoder->input_bytes -= bytes_consumed;
+		m_decode_position += bytes_consumed;
+	}
+	m_decoder->input_bit_position = position & 7;
+	return true;
 }
 
 TIMER_CALLBACK_MEMBER(sti3400_device::decode_tick)
 {
-	// Until picture reconstruction is implemented, consume all compressed data at each picture period.
-	if (m_registers[REG_CTL] & CTL_EDC)
-		m_decode_position = m_fifo_write;
+	if ((m_registers[REG_CTL] & CTL_EDC) && !m_decoder->frame_pending)
+	{
+		bool decoded = false;
+		do
+		{
+			bool frame_valid = false;
+			decoded = decode_frame(frame_valid);
+			if (frame_valid)
+				break;
+		}
+		while (decoded);
+	}
 
 	update_status();
 	activate_event();
-	m_decode_timer->adjust(attotime::from_hz(DEFAULT_FRAME_RATE));
+	m_decode_timer->adjust(attotime::from_hz(m_decoder->frame_rate));
 }
 
 void sti3400_device::vblank_w(int state)
 {
 	if (!state)
 		return;
+
+	// Present only complete pictures, and only while the display is outside its visible area.
+	if (m_decoder->frame_pending)
+	{
+		std::swap(m_decoder->display_buffer, m_decoder->decode_buffer);
+		m_decoder->width = m_decoder->decoded_width;
+		m_decoder->height = m_decoder->decoded_height;
+		m_decoder->valid = true;
+		m_decoder->frame_pending = false;
+	}
 
 	// A VSYNC-generated DSYNC starts the next task and restarts automatic start-code detection.
 	if ((m_registers[REG_CTL] & CTL_EDC) && !(m_registers[REG_CTL] & CTL_DVS) &&
@@ -112,7 +263,14 @@ void sti3400_device::vblank_w(int state)
 
 void sti3400_device::stream_byte_w(u8 data)
 {
-	m_fifo[m_fifo_write & (STREAM_HISTORY_SIZE - 1)] = data;
+	if (m_decoder->input_bytes == m_decoder->input.size())
+	{
+		logerror("%s: compressed-video input overflow\n", machine().describe_context());
+		return;
+	}
+	m_decoder->input[m_decoder->input_bytes++] = data;
+
+	m_fifo[m_fifo_write & (COMPRESSED_DATA_BUFFER_BYTES - 1)] = data;
 	m_fifo_write++;
 	m_start_code_shift = (m_start_code_shift << 8) | data;
 
@@ -130,6 +288,38 @@ void sti3400_device::stream_byte_w(u8 data)
 
 	update_status();
 	activate_event();
+}
+
+bool sti3400_device::video_valid() const
+{
+	return m_decoder->valid;
+}
+
+u16 sti3400_device::video_width() const
+{
+	return m_decoder->width;
+}
+
+u16 sti3400_device::video_height() const
+{
+	return m_decoder->height;
+}
+
+u32 sti3400_device::video_pixel(unsigned x, unsigned y) const
+{
+	if (!m_decoder->valid || (x >= m_decoder->width) || (y >= m_decoder->height))
+		return 0;
+
+	const unsigned buffer_offset = m_decoder->display_buffer * MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT;
+	const u32 ycbcr = m_decoder->video[buffer_offset + y * MAX_VIDEO_WIDTH + x];
+	const int luminance = ycbcr & 0xff;
+	const int cb = ((ycbcr >> 8) & 0xff) - 128;
+	const int cr = ((ycbcr >> 16) & 0xff) - 128;
+	const int scaled_luminance = 298 * (luminance - 16);
+	const u8 red = std::clamp((scaled_luminance + 409 * cr + 128) >> 8, 0, 255);
+	const u8 green = std::clamp((scaled_luminance - 100 * cb - 208 * cr + 128) >> 8, 0, 255);
+	const u8 blue = std::clamp((scaled_luminance + 516 * cb + 128) >> 8, 0, 255);
+	return rgb_t(red, green, blue);
 }
 
 void sti3400_device::queue_start_code(u64 position, u8 code)
@@ -238,14 +428,12 @@ u8 sti3400_device::stream_byte_r()
 	if (m_fifo_read >= m_fifo_write)
 		return 0;
 
-	return m_fifo[m_fifo_read++ & (STREAM_HISTORY_SIZE - 1)];
+	return m_fifo[m_fifo_read++ & (COMPRESSED_DATA_BUFFER_BYTES - 1)];
 }
 
 u16 sti3400_device::read(offs_t offset, u16 mem_mask)
 {
-	const unsigned address = offset & REGISTER_ADDRESS_MASK;
-
-	switch (address)
+	switch (offset)
 	{
 	case REG_HDF:
 	{
@@ -275,15 +463,13 @@ u16 sti3400_device::read(offs_t offset, u16 mem_mask)
 	}
 
 	default:
-		return m_registers[address];
+		return m_registers[offset];
 	}
 }
 
 void sti3400_device::write(offs_t offset, u16 data, u16 mem_mask)
 {
-	const unsigned address = offset & REGISTER_ADDRESS_MASK;
-
-	if (address == REG_CDF)
+	if (offset == REG_CDF)
 	{
 		if (ACCESSING_BITS_8_15)
 			stream_byte_w(data >> 8);
@@ -292,13 +478,13 @@ void sti3400_device::write(offs_t offset, u16 data, u16 mem_mask)
 		return;
 	}
 
-	const u16 old_data = m_registers[address];
-	COMBINE_DATA(&m_registers[address]);
+	const u16 old_data = m_registers[offset];
+	COMBINE_DATA(&m_registers[offset]);
 
-	switch (address)
+	switch (offset)
 	{
 	case REG_CTL:
-		if ((old_data & CTL_SRS) && !(m_registers[address] & CTL_SRS))
+		if ((old_data & CTL_SRS) && !(m_registers[offset] & CTL_SRS))
 			decoder_soft_reset();
 		else
 			update_status();
