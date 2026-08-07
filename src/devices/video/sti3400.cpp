@@ -31,9 +31,6 @@ constexpr u8 MPEG_SEQUENCE_END_CODE = 0xb7;
 constexpr unsigned MAX_VIDEO_WIDTH = 768;
 constexpr unsigned MAX_VIDEO_HEIGHT = 576;
 
-// Allow the host to inspect headers while compressed input continues to arrive.
-constexpr unsigned HEADER_LOOKAHEAD_BYTES = 256;
-
 // Used until the MPEG sequence header supplies a picture rate.
 constexpr unsigned FALLBACK_FRAME_RATE = 25;
 
@@ -56,6 +53,7 @@ struct sti3400_device::decoder_state
 	u16 decoded_width = 0;
 	u16 decoded_height = 0;
 	double frame_rate = FALLBACK_FRAME_RATE;
+	unsigned presentation_requests = 0;
 	bool valid = false;
 	bool frame_pending = false;
 };
@@ -101,6 +99,7 @@ void sti3400_device::device_start()
 	save_item(NAME(m_decoder->decoded_width));
 	save_item(NAME(m_decoder->decoded_height));
 	save_item(NAME(m_decoder->frame_rate));
+	save_item(NAME(m_decoder->presentation_requests));
 	save_item(NAME(m_decoder->valid));
 	save_item(NAME(m_decoder->frame_pending));
 }
@@ -134,6 +133,7 @@ void sti3400_device::device_reset()
 	m_decoder->decoded_width = 0;
 	m_decoder->decoded_height = 0;
 	m_decoder->frame_rate = FALLBACK_FRAME_RATE;
+	m_decoder->presentation_requests = 0;
 	m_decoder->valid = false;
 	m_decoder->frame_pending = false;
 	decoder_create();
@@ -166,6 +166,7 @@ void sti3400_device::decoder_soft_reset()
 	m_decoder->decoded_width = 0;
 	m_decoder->decoded_height = 0;
 	m_decoder->frame_rate = FALLBACK_FRAME_RATE;
+	m_decoder->presentation_requests = 0;
 	m_decoder->valid = false;
 	m_decoder->frame_pending = false;
 	decoder_create();
@@ -201,8 +202,13 @@ bool sti3400_device::decode_frame(bool &frame_valid)
 	m_decoder->decoded_width = width;
 	m_decoder->decoded_height = height;
 	m_decoder->frame_rate = frame_rate;
-	if (frame_valid)
+	// DFP selects which reconstructed picture is shown.  The software decoder
+	// supplies pictures in display order, so each DFP write grants one display slot.
+	if (frame_valid && m_decoder->presentation_requests)
+	{
 		m_decoder->frame_pending = true;
+		m_decoder->presentation_requests--;
+	}
 
 	const unsigned bytes_consumed = position / 8;
 	if (bytes_consumed)
@@ -348,10 +354,6 @@ void sti3400_device::activate_event()
 			if (m_decode_position <= position)
 				return;
 		}
-		else if ((m_fifo_write - position) < HEADER_LOOKAHEAD_BYTES)
-		{
-			return;
-		}
 
 		m_event_active = true;
 		m_fifo_read = position;
@@ -496,6 +498,10 @@ void sti3400_device::write(offs_t offset, u16 data, u16 mem_mask)
 
 	case REG_HDS:
 		finish_event();
+		break;
+
+	case REG_DFP:
+		m_decoder->presentation_requests++;
 		break;
 
 	case REG_BBB:

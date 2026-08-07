@@ -39,6 +39,7 @@ private:
 	static constexpr unsigned REG_HDS = 0x12; // header data search command
 	static constexpr unsigned REG_INS = 0x14; // next decoding instruction
 	static constexpr unsigned REG_BBB = 0x16; // bit-buffer bottom threshold
+	static constexpr unsigned REG_DFP = 0x18; // displayed picture pointer
 	static constexpr unsigned REG_BBL = 0x22; // current bit-buffer level
 	static constexpr unsigned REG_BBT = 0x32; // bit-buffer top threshold
 
