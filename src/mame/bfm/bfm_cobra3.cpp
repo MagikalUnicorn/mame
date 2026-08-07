@@ -85,6 +85,7 @@ protected:
 	virtual void machine_start() override ATTR_COLD;
 
 	void volume_control(uint8_t direction, uint8_t clock);
+	void av110_reset_strobe_w(u8 data);
 	uint16_t mem_r(offs_t offset, uint16_t mem_mask = ~0);
 	void mem_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
 
@@ -125,6 +126,13 @@ void bfm_cobra3_state::volume_control(uint8_t direction, uint8_t clock)
 			m_av110->set_output_gain(1, fraction);
 		}
 	}
+}
+
+void bfm_cobra3_state::av110_reset_strobe_w(u8)
+{
+	// This decoded write pulses the AV110's active-low RESET input.
+	m_av110->reset_w(0);
+	m_av110->reset_w(1);
 }
 
 uint16_t bfm_cobra3_state::mem_r(offs_t offset, uint16_t mem_mask)
@@ -316,7 +324,7 @@ void bfm_cobra3_state::bfm_cobra3_map(address_map &map)
 	map(0x00000000, 0xffffffff).rw(FUNC(bfm_cobra3_state::mem_r), FUNC(bfm_cobra3_state::mem_w));
 	map(0x00800000, 0x009fffff).m(m_scc66470, FUNC(scc66470_device::map)).cswidth(16);
 	map(0x00a40000, 0x00a4007f).rw(m_sti3400, FUNC(sti3400_device::read), FUNC(sti3400_device::write));
-	map(0x00a80000, 0x00a80001).w(m_av110, FUNC(tms320av110_device::reset_w)).umask16(0x00ff);
+	map(0x00a80000, 0x00a80001).w(FUNC(bfm_cobra3_state::av110_reset_strobe_w)).umask16(0x00ff);
 	map(0x00a81000, 0x00a810ff).rw(m_av110, FUNC(tms320av110_device::read), FUNC(tms320av110_device::write)).umask16(0x00ff);
 }
 
@@ -506,7 +514,8 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	m_ymz->add_route(1, "rspeaker", 1.0);
 
 	TMS320AV110(config, m_av110, 0);
-	m_av110->drq().set(m_maincpu, FUNC(m68340_cpu_device::dma_dreq2_w)).invert();
+	// AV110 REQ and MC68340 DREQ2 are both active low.
+	m_av110->req().set(m_maincpu, FUNC(m68340_cpu_device::dma_dreq2_w));
 	m_av110->add_route(0, "lspeaker", 1.0);
 	m_av110->add_route(1, "rspeaker", 1.0);
 

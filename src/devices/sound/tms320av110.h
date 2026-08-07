@@ -6,18 +6,15 @@
 
 #pragma once
 
-struct plm_audio_t;
-struct plm_buffer_t;
-
-
 class tms320av110_device : public device_t, public device_sound_interface
 {
 public:
 	tms320av110_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock = 0);
+	virtual ~tms320av110_device();
 
-	auto drq() { return m_drq_cb.bind(); }
+	auto req() { return m_req_cb.bind(); } // active-low compressed-data request output
 
-	void reset_w(u8 data);
+	void reset_w(int state); // active-low RESET input
 	u8 read(offs_t offset);
 	void write(offs_t offset, u8 data);
 
@@ -28,8 +25,7 @@ protected:
 	virtual void sound_stream_update(sound_stream &stream) override;
 
 private:
-	static constexpr unsigned DECODE_STAGING_SIZE = 0x200;
-	static constexpr unsigned PCM_FRAME_COUNT = 1U << 13;
+	struct decoder_state;
 
 	void decoder_create();
 	void decoder_destroy();
@@ -39,17 +35,9 @@ private:
 	void fifo_w(u8 data);
 
 	sound_stream *m_stream;
-	devcb_write_line m_drq_cb;
-	plm_buffer_t *m_decode_buffer;
-	plm_audio_t *m_audio_decoder;
-	std::unique_ptr<float[]> m_pcm;
-
-	u8 m_registers[0x80];
-	u8 m_decode_staging[DECODE_STAGING_SIZE];
-	u16 m_decode_staging_count;
-	u64 m_pcm_read;
-	u64 m_pcm_write;
-	u8 m_control;
+	devcb_write_line m_req_cb;
+	std::unique_ptr<decoder_state> m_decoder;
+	bool m_reset_asserted;
 };
 
 DECLARE_DEVICE_TYPE(TMS320AV110, tms320av110_device)
