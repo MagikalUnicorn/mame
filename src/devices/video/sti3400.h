@@ -32,7 +32,8 @@ protected:
 	virtual void device_stop() override ATTR_COLD;
 
 private:
-	static constexpr unsigned FIFO_SIZE = 0x10000;
+	// This is stream history for header searches, not the STi3400's 512-bit CD FIFO.
+	static constexpr unsigned STREAM_HISTORY_SIZE = 1U << (14 + 8); // BBS is in 256-byte units
 	static constexpr unsigned EVENT_COUNT = 0x100;
 	static constexpr unsigned HEADER_LOOKAHEAD = 0x100;
 	static constexpr unsigned DECODE_STAGING_SIZE = 0x800;
@@ -48,13 +49,16 @@ private:
 	void queue_start_code(u64 position, u8 code);
 	void activate_event();
 	void finish_event();
+	u16 bit_buffer_level() const;
+	u16 decoder_status() const;
+	void update_status();
 	void update_irq();
 	u8 stream_byte_r();
 
 	devcb_write_line m_irq_cb;
 
 	u16 m_registers[0x40];
-	u8 m_fifo[FIFO_SIZE];
+	u8 m_fifo[STREAM_HISTORY_SIZE];
 	u8 m_decode_staging[DECODE_STAGING_SIZE];
 	u64 m_event_position[EVENT_COUNT];
 	u8 m_event_code[EVENT_COUNT];
@@ -77,10 +81,9 @@ private:
 	u16 m_event_head;
 	u16 m_event_tail;
 	u16 m_event_count;
+	u16 m_interrupt_status;
+	u16 m_status;
 	bool m_event_active;
-	bool m_picture_complete;
-	bool m_picture_completion_armed;
-	bool m_irq_suppressed;
 	bool m_irq_state;
 	bool m_video_valid;
 	bool m_decoded_frame_pending;

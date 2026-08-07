@@ -58,10 +58,9 @@ void sti3400_device::device_start()
 	save_item(NAME(m_event_head));
 	save_item(NAME(m_event_tail));
 	save_item(NAME(m_event_count));
+	save_item(NAME(m_interrupt_status));
+	save_item(NAME(m_status));
 	save_item(NAME(m_event_active));
-	save_item(NAME(m_picture_complete));
-	save_item(NAME(m_picture_completion_armed));
-	save_item(NAME(m_irq_suppressed));
 	save_item(NAME(m_irq_state));
 	save_item(NAME(m_video_valid));
 	save_item(NAME(m_decoded_frame_pending));
@@ -95,10 +94,9 @@ void sti3400_device::device_reset()
 	m_event_head = 0;
 	m_event_tail = 0;
 	m_event_count = 0;
+	m_interrupt_status = 0;
+	m_status = 0x0214;
 	m_event_active = false;
-	m_picture_complete = false;
-	m_picture_completion_armed = true;
-	m_irq_suppressed = false;
 	m_irq_state = false;
 	m_video_valid = false;
 	m_decoded_frame_pending = false;
@@ -158,30 +156,32 @@ void sti3400_device::decoder_soft_reset()
 	m_event_tail = 0;
 	m_event_count = 0;
 	m_event_active = false;
-	m_picture_complete = false;
-	m_picture_completion_armed = true;
-	m_irq_suppressed = false;
 	m_decoded_frame_pending = false;
 	m_decode_has_sequence_header = false;
 	m_decode_sequence_ended = false;
-	update_irq();
+	update_status();
 }
 
 TIMER_CALLBACK_MEMBER(sti3400_device::decode_tick)
 {
 	decoder_flush();
 
-	// Keep a completed dynamic stream marked as ended while PL_MPEG drains and compacts its buffer.
-	if (m_decode_sequence_ended)
-		plm_buffer_signal_end(m_decode_buffer);
-
-	if (plm_frame_t *const frame = plm_video_decode(m_video_decoder))
+	if (BIT(m_registers[0x14 / 2], 0))
 	{
-		m_decoded_width = std::min<unsigned>(frame->width, MAX_VIDEO_WIDTH);
-		m_decoded_height = std::min<unsigned>(frame->height, MAX_VIDEO_HEIGHT);
-		plm_frame_to_bgra(frame, reinterpret_cast<u8 *>(m_decoded_frame.get()), MAX_VIDEO_WIDTH * sizeof(u32));
-		m_decoded_frame_pending = true;
+		// Keep a completed dynamic stream marked as ended while PL_MPEG drains and compacts its buffer.
+		if (m_decode_sequence_ended)
+			plm_buffer_signal_end(m_decode_buffer);
+
+		if (plm_frame_t *const frame = plm_video_decode(m_video_decoder))
+		{
+			m_decoded_width = std::min<unsigned>(frame->width, MAX_VIDEO_WIDTH);
+			m_decoded_height = std::min<unsigned>(frame->height, MAX_VIDEO_HEIGHT);
+			plm_frame_to_bgra(frame, reinterpret_cast<u8 *>(m_decoded_frame.get()), MAX_VIDEO_WIDTH * sizeof(u32));
+			m_decoded_frame_pending = true;
+		}
 	}
+
+	update_status();
 	activate_event();
 
 	const double frame_rate = plm_video_get_framerate(m_video_decoder);
@@ -194,6 +194,13 @@ void sti3400_device::vblank_w(int state)
 {
 	if (!state)
 		return;
+
+	// A VSYNC-generated DSYNC starts the next task and restarts automatic start-code detection.
+	if (BIT(m_registers[0x14 / 2], 0) && !BIT(m_registers[0x14 / 2], 7) &&
+		!BIT(m_registers[0x28 / 2], 2) && m_event_active)
+	{
+		finish_event();
+	}
 
 	if (m_decoded_frame_pending)
 	{
@@ -211,7 +218,7 @@ void sti3400_device::stream_byte_w(u8 data)
 	if (m_decode_staging_count == DECODE_STAGING_SIZE)
 		decoder_flush();
 
-	m_fifo[m_fifo_write & (FIFO_SIZE - 1)] = data;
+	m_fifo[m_fifo_write & (STREAM_HISTORY_SIZE - 1)] = data;
 	m_fifo_write++;
 	m_start_code_shift = (m_start_code_shift << 8) | data;
 
@@ -243,15 +250,15 @@ void sti3400_device::stream_byte_w(u8 data)
 			m_decode_sequence_ended = false;
 		}
 
-		// The start-code interrupt is used for MPEG headers, not slice data.
-		if ((code == 0x00) || (code == 0xb2) || (code == 0xb3) ||
-			(code == 0xb5) || (code == 0xb7) || (code == 0xb8))
+		// In MPEG mode the detector recognises every start code except slice codes 01-AF.
+		if ((code == 0x00) || (code >= 0xb0))
 		{
 			LOGMASKED(LOG_START_CODES, "start code %02x at %08x\n", code, u32(m_fifo_write - 1));
 			queue_start_code(m_fifo_write - 1, code);
 		}
 	}
 
+	update_status();
 	activate_event();
 }
 
@@ -288,9 +295,8 @@ void sti3400_device::activate_event()
 		}
 
 		m_event_active = true;
-		m_irq_suppressed = false;
 		m_fifo_read = position;
-		update_irq();
+		update_status();
 	}
 }
 
@@ -298,28 +304,62 @@ void sti3400_device::finish_event()
 {
 	if (m_event_active)
 	{
-		if (m_picture_completion_armed && (m_event_code[m_event_head] == 0x00))
-		{
-			m_picture_complete = true;
-			m_picture_completion_armed = false;
-		}
-
 		m_event_head = (m_event_head + 1) & (EVENT_COUNT - 1);
 		m_event_count--;
 		m_event_active = false;
-		m_irq_suppressed = false;
 	}
 
-	update_irq();
+	update_status();
 	activate_event();
+}
+
+u16 sti3400_device::bit_buffer_level() const
+{
+	const u64 decoder_remaining = m_decode_buffer ? plm_buffer_get_remaining(m_decode_buffer) : 0;
+	const u64 decoder_consumed = (m_decode_stream_written > decoder_remaining)
+		? (m_decode_stream_written - decoder_remaining)
+		: 0;
+	const u64 decoder_position = m_decode_stream_base + decoder_consumed;
+	const u64 bytes_available = (m_fifo_write > decoder_position) ? (m_fifo_write - decoder_position) : 0;
+
+	// BBL is expressed in 256-byte units, with the first 64 bytes excluded.
+	return std::min<u64>((bytes_available > 64) ? ((bytes_available - 64) / 256) : 0, 0x3fff);
+}
+
+u16 sti3400_device::decoder_status() const
+{
+	const u16 level = bit_buffer_level();
+	u16 status = 0;
+
+	// The high-level decoder does not expose picture-task execution state.
+	if (!BIT(m_registers[0x14 / 2], 0))
+		status |= 0x0200;
+	if (!level || (level < (m_registers[0x2c / 2] & 0x3fff)))
+		status |= 0x0010;
+	if (level > (m_registers[0x64 / 2] & 0x3fff))
+		status |= 0x0008;
+	if (!m_event_active || (m_fifo_read >= m_fifo_write))
+		status |= 0x0004;
+	if (m_event_active && ((m_fifo_write - m_fifo_read) >= 32))
+		status |= 0x1000;
+	if (m_event_active && (m_fifo_read == m_event_position[m_event_head]))
+		status |= 0x0001;
+
+	return status;
+}
+
+void sti3400_device::update_status()
+{
+	const u16 status = decoder_status();
+	m_interrupt_status |= status & ~m_status;
+	m_status = status;
+	update_irq();
 }
 
 void sti3400_device::update_irq()
 {
 	const u16 mask = m_registers[0x1c / 2];
-	const bool state =
-		(m_event_active && !m_irq_suppressed && BIT(mask, 0)) ||
-		(m_picture_complete && BIT(mask, 3));
+	const bool state = bool(m_interrupt_status & mask);
 	if (state != m_irq_state)
 	{
 		m_irq_state = state;
@@ -332,7 +372,7 @@ u8 sti3400_device::stream_byte_r()
 	if (m_fifo_read >= m_fifo_write)
 		return 0;
 
-	return m_fifo[m_fifo_read++ & (FIFO_SIZE - 1)];
+	return m_fifo[m_fifo_read++ & (STREAM_HISTORY_SIZE - 1)];
 }
 
 u16 sti3400_device::read(offs_t offset, u16 mem_mask)
@@ -344,19 +384,31 @@ u16 sti3400_device::read(offs_t offset, u16 mem_mask)
 	switch (address)
 	{
 	case 0x04: // header data FIFO
-		return (stream_byte_r() << 8) | stream_byte_r();
+	{
+		const u16 result = (stream_byte_r() << 8) | stream_byte_r();
+		update_status();
+		return result;
+	}
 
 	case 0x08: // header FIFO bit alignment
-	case 0x10: // decoder status
 		return 0;
 
-	case 0x44: // compressed-data FIFO level
-		// A non-empty level causes the host to enable start-code interrupts
-		// while it streams data, rather than preloading the complete file.
-		return m_fifo_write ? 0x0100 : 0x0000;
+	case 0x10: // decoder status
+		return m_status;
+
+	case 0x44: // bit buffer level
+		return bit_buffer_level();
 
 	case 0x20: // interrupt status
-		return (m_event_active ? 0x0001 : 0x0000) | (m_picture_complete ? 0x0008 : 0x0000);
+	{
+		const u16 result = m_interrupt_status;
+		if (ACCESSING_BITS_8_15)
+			m_interrupt_status &= 0x00ff;
+		if (ACCESSING_BITS_0_7)
+			m_interrupt_status &= 0xff00;
+		update_irq();
+		return result;
+	}
 
 	default:
 		return m_registers[address >> 1];
@@ -386,37 +438,21 @@ void sti3400_device::write(offs_t offset, u16 data, u16 mem_mask)
 	case 0x14: // control
 		if (BIT(old_data, 1) && !BIT(m_registers[address >> 1], 1))
 			decoder_soft_reset();
+		else
+			update_status();
 		break;
 
 	case 0x1c: // interrupt mask
-		if (!m_registers[address >> 1])
-			m_picture_completion_armed = true;
 		update_irq();
 		break;
 
 	case 0x24: // release start-code detector
-		if (m_registers[address >> 1] == 0)
-			finish_event();
+		finish_event();
 		break;
 
-	case 0x28: // decoder/interrupt control
-		if (m_event_active && (m_registers[address >> 1] == 0x0004))
-		{
-			m_irq_suppressed = true;
-			update_irq();
-		}
-		else
-		{
-			const bool clear_picture_complete = m_picture_complete;
-
-			if (m_event_active && m_irq_suppressed)
-				finish_event();
-			if (clear_picture_complete)
-			{
-				m_picture_complete = false;
-				update_irq();
-			}
-		}
+	case 0x2c: // bit buffer bottom threshold
+	case 0x64: // bit buffer top threshold
+		update_status();
 		break;
 	}
 }
