@@ -56,6 +56,7 @@ public:
 	{ }
 
 	void bfm_cobra3(machine_config &config) ATTR_COLD;
+	int meter_sense_r();
 
 protected:
 	// devices
@@ -70,7 +71,7 @@ protected:
 	required_device<sti3400_device> m_sti3400;
 	required_ioport_array<5> m_strobein;
 	required_ioport m_iostatus;
-	optional_device<meters_device> m_meters;
+	required_device<meters_device> m_meters;
 	output_finder<24> m_lamps;
 	required_device<nscsi_bus_device> m_scsibus;
 	required_device<ncr5380_device> m_scsic;
@@ -160,6 +161,17 @@ void bfm_cobra3_state::av110_reset_strobe_w(u8)
 	// This decoded write pulses the AV110's active-low RESET input.
 	m_av110->reset_w(0);
 	m_av110->reset_w(1);
+}
+
+int bfm_cobra3_state::meter_sense_r()
+{
+	for (unsigned i = 0; i < 4; i++)
+	{
+		if (m_meters->get_activity(i))
+			return 1;
+	}
+
+	return 0;
 }
 
 uint16_t bfm_cobra3_state::mem_r(offs_t offset, uint16_t mem_mask)
@@ -372,7 +384,8 @@ static INPUT_PORTS_START( bfm_cobra3 )
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_COIN2 ) PORT_NAME("50p") PORT_IMPULSE(3)
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_COIN1 ) PORT_NAME(u8"£1") PORT_IMPULSE(3)
 	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("Invalid Coin")
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("Payout Unit Sensor")
+	// Current through any active meter is returned on a shared sensing line.
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(FUNC(bfm_cobra3_state::meter_sense_r))
 	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_SERVICE ) PORT_NAME("Test") PORT_CODE(KEYCODE_F1)
 	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 
