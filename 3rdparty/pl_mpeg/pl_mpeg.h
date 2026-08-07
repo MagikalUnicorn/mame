@@ -3981,7 +3981,7 @@ plm_samples_t *plm_audio_decode(plm_audio_t *self) {
 
 int plm_audio_find_frame_sync(plm_audio_t *self) {
 	size_t i;
-	for (i = self->buffer->bit_index >> 3; i + 1 < self->buffer->length; i++) {
+	for (i = self->buffer->bit_index >> 3; i < self->buffer->length-1; i++) {
 		if (
 			self->buffer->bytes[i] == 0xFF &&
 			(self->buffer->bytes[i+1] & 0xFE) == 0xFC
@@ -3990,7 +3990,7 @@ int plm_audio_find_frame_sync(plm_audio_t *self) {
 			return TRUE;
 		}
 	}
-	self->buffer->bit_index = self->buffer->length << 3;
+	self->buffer->bit_index = (i + 1) << 3;
 	return FALSE;
 }
 
