@@ -56,7 +56,12 @@ public:
 	{ }
 
 	void bfm_cobra3(machine_config &config) ATTR_COLD;
+	void c3_telly(machine_config &config) ATTR_COLD;
 	int meter_sense_r();
+	int pound_tube_low_r();
+	int twenty_p_tube_low_r();
+	DECLARE_INPUT_CHANGED_MEMBER(coin_inserted);
+	DECLARE_INPUT_CHANGED_MEMBER(doors_changed);
 
 protected:
 	// devices
@@ -85,6 +90,10 @@ protected:
 	uint8_t m_volume;
 	uint16_t m_lamp_latch;
 	uint8_t m_lamp_port_a;
+	uint8_t m_meter_latch;
+	uint16_t m_pound_tube_level;
+	uint16_t m_twenty_p_tube_level;
+	bool m_telly_cabinet = false;
 
 	virtual void machine_start() override ATTR_COLD;
 
@@ -92,6 +101,8 @@ protected:
 	void lamp_latch_w(uint16_t data, uint16_t mem_mask);
 	void lamp_port_a_w(uint8_t data);
 	void update_lamps();
+	void update_meters(uint16_t data);
+	void update_payslides(uint16_t data);
 	void av110_reset_strobe_w(u8 data);
 	uint16_t mem_r(offs_t offset, uint16_t mem_mask = ~0);
 	void mem_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
@@ -124,6 +135,30 @@ void bfm_cobra3_state::lamp_port_a_w(uint8_t data)
 {
 	m_lamp_port_a = data;
 	update_lamps();
+}
+
+void bfm_cobra3_state::update_meters(uint16_t data)
+{
+	m_meter_latch = data & 0x0f;
+	bool const powered = !m_telly_cabinet || !BIT(m_strobein[2]->read(), 4);
+
+	for (unsigned i = 0; i < 4; i++)
+		m_meters->update(i, powered && BIT(m_meter_latch, i));
+}
+
+void bfm_cobra3_state::update_payslides(uint16_t data)
+{
+	uint8_t const triacs = (data >> 4) & 0x07;
+	uint8_t const rising = triacs & ~m_triac_latch;
+	m_triac_latch = triacs;
+
+	if (!m_telly_cabinet || !BIT(m_strobein[2]->read(), 2))
+		return;
+
+	if (BIT(rising, 0) && m_pound_tube_level)
+		m_pound_tube_level--;
+	if (BIT(rising, 2) && m_twenty_p_tube_level)
+		m_twenty_p_tube_level--;
 }
 
 void bfm_cobra3_state::volume_control(uint8_t direction, uint8_t clock)
@@ -165,13 +200,41 @@ void bfm_cobra3_state::av110_reset_strobe_w(u8)
 
 int bfm_cobra3_state::meter_sense_r()
 {
-	for (unsigned i = 0; i < 4; i++)
+	unsigned const meter_count = m_telly_cabinet ? 2 : 4;
+
+	for (unsigned i = 0; i < meter_count; i++)
 	{
 		if (m_meters->get_activity(i))
 			return 1;
 	}
 
 	return 0;
+}
+
+int bfm_cobra3_state::pound_tube_low_r()
+{
+	return m_pound_tube_level <= 13; // the level switch opens above £13
+}
+
+int bfm_cobra3_state::twenty_p_tube_low_r()
+{
+	return m_twenty_p_tube_level <= 23; // the level switch opens above £4.60
+}
+
+INPUT_CHANGED_MEMBER(bfm_cobra3_state::coin_inserted)
+{
+	if (!newval || !m_telly_cabinet || !BIT(m_strobein[2]->read(), 2))
+		return;
+
+	if ((param == 100) && (m_pound_tube_level < 40)) // £40 capacity
+		m_pound_tube_level++;
+	else if ((param == 20) && (m_twenty_p_tube_level < 150)) // £30 capacity
+		m_twenty_p_tube_level++;
+}
+
+INPUT_CHANGED_MEMBER(bfm_cobra3_state::doors_changed)
+{
+	update_meters(m_meter_latch);
 }
 
 uint16_t bfm_cobra3_state::mem_r(offs_t offset, uint16_t mem_mask)
@@ -266,9 +329,15 @@ void bfm_cobra3_state::mem_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 						break;
 
 					case 0x100:
-						logerror("%s maincpu write access lockout latch offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset*4, data, mem_mask, cs);
-						//TODO, does this need the ACCESSING_BITS_8_15?
-						// coin lockout and optional vfd (debug only?)
+						if (ACCESSING_BITS_8_15)
+						{
+							uint8_t const enables = data >> 8;
+							machine().bookkeeping().coin_lockout_w(0, !BIT(enables, 3)); // £1
+							machine().bookkeeping().coin_lockout_w(1, !BIT(enables, 2)); // 50p
+							machine().bookkeeping().coin_lockout_w(2, !BIT(enables, 1)); // 20p
+							machine().bookkeeping().coin_lockout_w(3, !BIT(enables, 0)); // 10p
+							machine().bookkeeping().coin_lockout_w(4, !BIT(enables, 4)); // fifth validator channel
+						}
 						break;
 
 					case 0x200:
@@ -276,16 +345,8 @@ void bfm_cobra3_state::mem_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 						{
 							logerror("%s maincpu write access io latch offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset*4, data, mem_mask, cs);
 						}
-						for (int i=0; i<4; i++)
-						{
-							m_meters->update(i, BIT(data, i));
-
-						}
-						for (int i=4; i<6; i++)
-						{
-							//triacs
-						}
-						m_triac_latch = BIT(data, 9);
+						update_meters(data);
+						update_payslides(data);
 						volume_control(BIT(data,7), BIT(data,15));
 						m_watchdog->reset_line_w(BIT(data , 8));
 
@@ -383,7 +444,7 @@ static INPUT_PORTS_START( bfm_cobra3 )
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_COIN3 ) PORT_NAME("20p") PORT_IMPULSE(3)
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_COIN2 ) PORT_NAME("50p") PORT_IMPULSE(3)
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_COIN1 ) PORT_NAME(u8"£1") PORT_IMPULSE(3)
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("Invalid Coin")
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_COIN5 ) PORT_NAME("Invalid Coin")
 	// Current through any active meter is returned on a shared sensing line.
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(FUNC(bfm_cobra3_state::meter_sense_r))
 	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_SERVICE ) PORT_NAME("Test") PORT_CODE(KEYCODE_F1)
@@ -440,21 +501,43 @@ static INPUT_PORTS_START( bfm_cobra3 )
 
 INPUT_PORTS_END
 
+static INPUT_PORTS_START( c3_telly )
+	PORT_INCLUDE(bfm_cobra3)
+
+	PORT_MODIFY("IOSTATUS")
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_COIN3 ) PORT_NAME("20p") PORT_IMPULSE(3) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(bfm_cobra3_state::coin_inserted), 20)
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_COIN1 ) PORT_NAME(u8"£1") PORT_IMPULSE(3) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(bfm_cobra3_state::coin_inserted), 100)
+
+	PORT_MODIFY("STROBE2")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(FUNC(bfm_cobra3_state::pound_tube_low_r))
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(FUNC(bfm_cobra3_state::twenty_p_tube_low_r))
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Back and Front Doors") PORT_CODE(KEYCODE_T) PORT_TOGGLE PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(bfm_cobra3_state::doors_changed), 0)
+INPUT_PORTS_END
+
 
 void bfm_cobra3_state::machine_start()
 {
 	m_active_strobe = 0;
+	m_triac_latch = 0;
 	m_vol_clock = 0;
 	m_volume = 0;
 	m_lamp_latch = 0;
 	m_lamp_port_a = 0;
+	m_meter_latch = 0;
+	m_pound_tube_level = m_telly_cabinet ? 40 : 0;
+	m_twenty_p_tube_level = m_telly_cabinet ? 150 : 0;
 	m_mainram = make_unique_clear<uint16_t[]>((1024 * 16) / 2);
 	m_nvram->set_base(m_mainram.get(), 1024 * 16);
 
+	save_item(NAME(m_active_strobe));
+	save_item(NAME(m_triac_latch));
 	save_item(NAME(m_vol_clock));
 	save_item(NAME(m_volume));
 	save_item(NAME(m_lamp_latch));
 	save_item(NAME(m_lamp_port_a));
+	save_item(NAME(m_meter_latch));
+	save_item(NAME(m_pound_tube_level));
+	save_item(NAME(m_twenty_p_tube_level));
 	machine().save().register_postload(save_prepost_delegate(FUNC(bfm_cobra3_state::update_lamps), this));
 }
 
@@ -583,6 +666,15 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	METERS(config, m_meters).set_number(4);
 }
 
+void bfm_cobra3_state::c3_telly(machine_config &config)
+{
+	bfm_cobra3(config);
+
+	config.device_remove("meters");
+	METERS(config, m_meters).set_number(2);
+	m_telly_cabinet = true;
+}
+
 ROM_START( c3_rtime )
 	ROM_REGION( 0x100000, "maincpu", 0 )
 	ROM_LOAD16_BYTE( "95400009.bin", 0x00001, 0x080000, CRC(a5e0a5ca) SHA1(e7063ddfb436152f15267fde2aa7695c8a262191) )
@@ -678,8 +770,8 @@ ROM_END
 
 } // anonymous namespace
 
-GAMEL( 1995, c3_telly,  0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "Telly Addicts (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
-GAMEL( 1995, c3_tellyns,0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "Telly Addicts (New Series) (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
+GAMEL( 1995, c3_telly,  0, c3_telly, c3_telly, bfm_cobra3_state, empty_init, ROT0, "BFM", "Telly Addicts (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
+GAMEL( 1995, c3_tellyns,0, c3_telly, c3_telly, bfm_cobra3_state, empty_init, ROT0, "BFM", "Telly Addicts (New Series) (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
 GAME( 1996, c3_rtime,  0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "Radio Times (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS| MACHINE_NOT_WORKING )
 GAME( 1997, c3_totp,   0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "Top of the Pops (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
 GAME( 1998, c3_ppays,  0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "The Phrase That Pays (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
