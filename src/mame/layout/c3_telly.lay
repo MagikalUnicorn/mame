@@ -18,6 +18,54 @@ copyright-holders:MagikalUnicorn
 			<color red="1.00" green="0.80" blue="0.10" />
 		</rect>
 	</element>
+	<element name="lamp_violet" defstate="0">
+		<rect state="0">
+			<color red="0.20" green="0.05" blue="0.24" />
+		</rect>
+		<rect state="1">
+			<color red="0.75" green="0.25" blue="0.90" />
+		</rect>
+	</element>
+	<element name="lamp_blue" defstate="0">
+		<rect state="0">
+			<color red="0.03" green="0.08" blue="0.25" />
+		</rect>
+		<rect state="1">
+			<color red="0.15" green="0.35" blue="1.00" />
+		</rect>
+	</element>
+	<element name="lamp_pink" defstate="0">
+		<rect state="0">
+			<color red="0.28" green="0.06" blue="0.14" />
+		</rect>
+		<rect state="1">
+			<color red="1.00" green="0.35" blue="0.65" />
+		</rect>
+	</element>
+	<element name="lamp_orange" defstate="0">
+		<rect state="0">
+			<color red="0.30" green="0.12" blue="0.02" />
+		</rect>
+		<rect state="1">
+			<color red="1.00" green="0.45" blue="0.05" />
+		</rect>
+	</element>
+	<element name="lamp_green" defstate="0">
+		<rect state="0">
+			<color red="0.03" green="0.20" blue="0.05" />
+		</rect>
+		<rect state="1">
+			<color red="0.10" green="0.90" blue="0.20" />
+		</rect>
+	</element>
+	<element name="lamp_red" defstate="0">
+		<rect state="0">
+			<color red="0.28" green="0.03" blue="0.03" />
+		</rect>
+		<rect state="1">
+			<color red="1.00" green="0.12" blue="0.08" />
+		</rect>
+	</element>
 
 	<element name="lamp_label_0">
 		<text string="A LEFT">
@@ -31,6 +79,11 @@ copyright-holders:MagikalUnicorn
 	</element>
 	<element name="lamp_label_2">
 		<text string="C LEFT">
+			<color red="0.00" green="0.00" blue="0.00" />
+		</text>
+	</element>
+	<element name="lamp_label_3">
+		<text string="COLLECT">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
@@ -80,11 +133,27 @@ copyright-holders:MagikalUnicorn
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
+	<element name="lamp_label_13">
+		<text string="ACCEPTOR">
+			<color red="0.00" green="0.00" blue="0.00" />
+		</text>
+	</element>
 
-	<repeat count="3">
-		<param name="n" start="13" increment="1" />
+	<repeat count="5">
+		<param name="n" start="14" increment="1" />
+		<param name="group" start="5" increment="-1" />
 		<element name="lamp_label_~n~">
-			<text string="~n~">
+			<text string="TELLY ~group~">
+				<color red="0.00" green="0.00" blue="0.00" />
+			</text>
+		</element>
+	</repeat>
+
+	<repeat count="5">
+		<param name="n" start="19" increment="1" />
+		<param name="group" start="5" increment="-1" />
+		<element name="lamp_label_~n~">
+			<text string="ADDICTS ~group~">
 				<color red="0.00" green="0.00" blue="0.00" />
 			</text>
 		</element>
@@ -96,26 +165,37 @@ copyright-holders:MagikalUnicorn
 		</screen>
 
 		<element ref="panel">
-			<bounds x="0" y="582" width="768" height="47" />
+			<bounds x="0" y="582" width="768" height="66" />
 		</element>
 
-		<repeat count="3">
+		<element name="lamp0" ref="lamp_violet">
+			<bounds x="80" y="586" width="70" height="16" />
+		</element>
+		<element name="lamp1" ref="lamp_blue">
+			<bounds x="157" y="586" width="70" height="16" />
+		</element>
+		<element name="lamp2" ref="lamp_pink">
+			<bounds x="234" y="586" width="70" height="16" />
+		</element>
+		<element name="lamp3" ref="lamp">
+			<bounds x="311" y="586" width="70" height="16" />
+		</element>
+		<element name="lamp4" ref="lamp">
+			<bounds x="388" y="586" width="70" height="16" />
+		</element>
+		<element name="lamp5" ref="lamp_orange">
+			<bounds x="465" y="586" width="70" height="16" />
+		</element>
+		<element name="lamp6" ref="lamp_green">
+			<bounds x="542" y="586" width="70" height="16" />
+		</element>
+		<element name="lamp7" ref="lamp_red">
+			<bounds x="619" y="586" width="70" height="16" />
+		</element>
+
+		<repeat count="8">
 			<param name="n" start="0" increment="1" />
 			<param name="x" start="80" increment="77" />
-			<element name="lamp~n~" ref="lamp">
-				<bounds x="~x~" y="586" width="70" height="16" />
-			</element>
-			<element ref="lamp_label_~n~">
-				<bounds x="~x~" y="586" width="70" height="16" />
-			</element>
-		</repeat>
-
-		<repeat count="4">
-			<param name="n" start="4" increment="1" />
-			<param name="x" start="388" increment="77" />
-			<element name="lamp~n~" ref="lamp">
-				<bounds x="~x~" y="586" width="70" height="16" />
-			</element>
 			<element ref="lamp_label_~n~">
 				<bounds x="~x~" y="586" width="70" height="16" />
 			</element>
@@ -129,6 +209,17 @@ copyright-holders:MagikalUnicorn
 			</element>
 			<element ref="lamp_label_~n~">
 				<bounds x="~x~" y="607" width="70" height="16" />
+			</element>
+		</repeat>
+
+		<repeat count="8">
+			<param name="n" start="16" increment="1" />
+			<param name="x" start="80" increment="77" />
+			<element name="lamp~n~" ref="lamp">
+				<bounds x="~x~" y="628" width="70" height="16" />
+			</element>
+			<element ref="lamp_label_~n~">
+				<bounds x="~x~" y="628" width="70" height="16" />
 			</element>
 		</repeat>
 	</view>

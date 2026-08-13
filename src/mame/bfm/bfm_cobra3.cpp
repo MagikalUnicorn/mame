@@ -72,7 +72,7 @@ protected:
 	required_ioport_array<5> m_strobein;
 	required_ioport m_iostatus;
 	required_device<meters_device> m_meters;
-	output_finder<16> m_lamps;
+	output_finder<24> m_lamps;
 	required_device<nscsi_bus_device> m_scsibus;
 	required_device<ncr5380_device> m_scsic;
 	required_device<watchdog_timer_device> m_watchdog;
@@ -84,11 +84,13 @@ protected:
 	uint8_t m_vol_clock;
 	uint8_t m_volume;
 	uint16_t m_lamp_latch;
+	uint8_t m_lamp_port_a;
 
 	virtual void machine_start() override ATTR_COLD;
 
 	void volume_control(uint8_t direction, uint8_t clock);
 	void lamp_latch_w(uint16_t data, uint16_t mem_mask);
+	void lamp_port_a_w(uint8_t data);
 	void update_lamps();
 	void av110_reset_strobe_w(u8 data);
 	uint16_t mem_r(offs_t offset, uint16_t mem_mask = ~0);
@@ -107,11 +109,20 @@ void bfm_cobra3_state::update_lamps()
 {
 	for (unsigned i = 0; i < 16; i++)
 		m_lamps[i] = BIT(m_lamp_latch, i);
+
+	for (unsigned i = 0; i < 8; i++)
+		m_lamps[16 + i] = BIT(m_lamp_port_a, i);
 }
 
 void bfm_cobra3_state::lamp_latch_w(uint16_t data, uint16_t mem_mask)
 {
 	COMBINE_DATA(&m_lamp_latch);
+	update_lamps();
+}
+
+void bfm_cobra3_state::lamp_port_a_w(uint8_t data)
+{
+	m_lamp_port_a = data;
 	update_lamps();
 }
 
@@ -382,7 +393,7 @@ static INPUT_PORTS_START( bfm_cobra3 )
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("A (Left)") PORT_CODE(KEYCODE_A)
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("B (Left)") PORT_CODE(KEYCODE_B)
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_NAME("C (Left)") PORT_CODE(KEYCODE_C)
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_UNKNOWN )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_GAMBLE_TAKE ) PORT_NAME("Collect")
 	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_START1 )
 	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_NAME("C (Right)")
 	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_NAME("B (Right)")
@@ -399,10 +410,13 @@ static INPUT_PORTS_START( bfm_cobra3 )
 	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 
 	PORT_START("STROBE2")
-	PORT_BIT( 0x03, IP_ACTIVE_HIGH, IPT_UNKNOWN )
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("Payout Unit Fitted") PORT_CODE(KEYCODE_H) PORT_TOGGLE
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Cashbox Door") PORT_CODE(KEYCODE_Y) PORT_TOGGLE
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Front Door") PORT_CODE(KEYCODE_T) PORT_TOGGLE
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME(u8"£1 Tube Low") PORT_CODE(KEYCODE_Q) PORT_TOGGLE
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("20p Tube Low") PORT_CODE(KEYCODE_W) PORT_TOGGLE
+	PORT_CONFNAME( 0x04, 0x04, "Payout Unit" )
+	PORT_CONFSETTING(    0x00, "Not Fitted" )
+	PORT_CONFSETTING(    0x04, "Fitted" )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Cash Door") PORT_CODE(KEYCODE_Y) PORT_TOGGLE
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Back and Front Doors") PORT_CODE(KEYCODE_T) PORT_TOGGLE
 	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_SERVICE ) PORT_NAME("Refill Key") PORT_CODE(KEYCODE_R) PORT_TOGGLE
 	PORT_BIT( 0xc0, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 
@@ -410,18 +424,14 @@ static INPUT_PORTS_START( bfm_cobra3 )
 	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 
 	PORT_START("STROBE4")
-	PORT_DIPNAME( 0x01, 0x00, "Clear Credits on Reset" ) PORT_DIPLOCATION("DIL:!01")
-	PORT_DIPSETTING(    0x00, DEF_STR( No ) )
-	PORT_DIPSETTING(    0x01, DEF_STR( Yes ) )
-	PORT_DIPNAME( 0x02, 0x00, "Reset Error Detection" ) PORT_DIPLOCATION("DIL:!02")
-	PORT_DIPSETTING(    0x00, "Enabled" )
-	PORT_DIPSETTING(    0x02, "Disabled" )
-	PORT_DIPUNUSED_DIPLOC( 0x04, 0x00, "DIL:!03" )
-	PORT_DIPUNUSED_DIPLOC( 0x08, 0x00, "DIL:!04" )
-	PORT_DIPNAME( 0x10, 0x10, DEF_STR( Demo_Sounds ) ) PORT_DIPLOCATION("DIL:!05")
+	PORT_DIPNAME( 0x01, 0x00, "Credit on Reset" ) PORT_DIPLOCATION("DIL:!01")
+	PORT_DIPSETTING(    0x00, "Retained" )
+	PORT_DIPSETTING(    0x01, "Lost" )
+	PORT_BIT( 0x0e, IP_ACTIVE_HIGH, IPT_UNKNOWN )
+	PORT_DIPNAME( 0x10, 0x00, DEF_STR( Demo_Sounds ) ) PORT_DIPLOCATION("DIL:!05")
 	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x10, DEF_STR( On ) )
-	PORT_DIPUNUSED_DIPLOC( 0x20, 0x00, "DIL:!06" )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 	PORT_DIPNAME( 0xc0, 0x00, "Target Percentage" ) PORT_DIPLOCATION("DIL:!07,!08")
 	PORT_DIPSETTING(    0x00, "30%" )
 	PORT_DIPSETTING(    0x40, "35%" )
@@ -437,12 +447,14 @@ void bfm_cobra3_state::machine_start()
 	m_vol_clock = 0;
 	m_volume = 0;
 	m_lamp_latch = 0;
+	m_lamp_port_a = 0;
 	m_mainram = make_unique_clear<uint16_t[]>((1024 * 16) / 2);
 	m_nvram->set_base(m_mainram.get(), 1024 * 16);
 
 	save_item(NAME(m_vol_clock));
 	save_item(NAME(m_volume));
 	save_item(NAME(m_lamp_latch));
+	save_item(NAME(m_lamp_port_a));
 	machine().save().register_postload(save_prepost_delegate(FUNC(bfm_cobra3_state::update_lamps), this));
 }
 
@@ -522,6 +534,7 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 {
 	M68340(config, m_maincpu, 16000000);
 	m_maincpu->set_addrmap(AS_PROGRAM, &bfm_cobra3_state::bfm_cobra3_map);
+	m_maincpu->pa_out_callback().set(FUNC(bfm_cobra3_state::lamp_port_a_w));
 
 	NVRAM(config, "nvram", nvram_device::DEFAULT_ALL_0);
 
