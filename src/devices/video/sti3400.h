@@ -80,7 +80,7 @@ private:
 	u16 decoder_status() const;
 	void update_status();
 	void update_irq();
-	u8 stream_byte_r();
+	u8 stream_byte(u64 position) const;
 
 	struct decoder_state;
 

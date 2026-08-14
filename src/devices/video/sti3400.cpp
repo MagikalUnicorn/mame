@@ -430,12 +430,12 @@ void sti3400_device::update_irq()
 	}
 }
 
-u8 sti3400_device::stream_byte_r()
+u8 sti3400_device::stream_byte(u64 position) const
 {
-	if (m_fifo_read >= m_fifo_write)
+	if (position >= m_fifo_write)
 		return 0;
 
-	return m_fifo[m_fifo_read++ & (COMPRESSED_DATA_BUFFER_BYTES - 1)];
+	return m_fifo[position & (COMPRESSED_DATA_BUFFER_BYTES - 1)];
 }
 
 u16 sti3400_device::read(offs_t offset, u16 mem_mask)
@@ -444,8 +444,12 @@ u16 sti3400_device::read(offs_t offset, u16 mem_mask)
 	{
 	case REG_HDF:
 	{
-		const u16 result = (stream_byte_r() << 8) | stream_byte_r();
-		update_status();
+		const u16 result = (stream_byte(m_fifo_read) << 8) | stream_byte(m_fifo_read + 1);
+		if (!machine().side_effects_disabled())
+		{
+			m_fifo_read = std::min(m_fifo_read + 2, m_fifo_write);
+			update_status();
+		}
 		return result;
 	}
 
@@ -461,11 +465,14 @@ u16 sti3400_device::read(offs_t offset, u16 mem_mask)
 	case REG_ITS:
 	{
 		const u16 result = m_interrupt_status;
-		if (ACCESSING_BITS_8_15)
-			m_interrupt_status &= 0x00ff;
-		if (ACCESSING_BITS_0_7)
-			m_interrupt_status &= 0xff00;
-		update_irq();
+		if (!machine().side_effects_disabled())
+		{
+			if (ACCESSING_BITS_8_15)
+				m_interrupt_status &= 0x00ff;
+			if (ACCESSING_BITS_0_7)
+				m_interrupt_status &= 0xff00;
+			update_irq();
+		}
 		return result;
 	}
 

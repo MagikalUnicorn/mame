@@ -196,7 +196,8 @@ u8 tms320av110_device::read(offs_t offset)
 		return 0; // The data sheet specifies that RESET low disables host accesses.
 
 	offset &= HOST_ADDRESS_MASK;
-	logerror("%s: unimplemented register read %02x\n", machine().describe_context(), offset);
+	if (!machine().side_effects_disabled())
+		logerror("%s: unimplemented register read %02x\n", machine().describe_context(), offset);
 	return 0;
 }
 
