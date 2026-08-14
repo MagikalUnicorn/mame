@@ -68,17 +68,17 @@ copyright-holders:MagikalUnicorn
 	</element>
 
 	<element name="lamp_label_0">
-		<text string="A LEFT">
+		<text string="A">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
 	<element name="lamp_label_1">
-		<text string="B LEFT">
+		<text string="B">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
 	<element name="lamp_label_2">
-		<text string="C LEFT">
+		<text string="C">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
@@ -93,17 +93,17 @@ copyright-holders:MagikalUnicorn
 		</text>
 	</element>
 	<element name="lamp_label_5">
-		<text string="C RIGHT">
+		<text string="C">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
 	<element name="lamp_label_6">
-		<text string="B RIGHT">
+		<text string="B">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
 	<element name="lamp_label_7">
-		<text string="A RIGHT">
+		<text string="A">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
@@ -168,28 +168,28 @@ copyright-holders:MagikalUnicorn
 			<bounds x="0" y="582" width="768" height="66" />
 		</element>
 
-		<element name="lamp0" ref="lamp_violet">
+		<element name="lamp0" ref="lamp_violet" inputtag="STROBE0" inputmask="0x01">
 			<bounds x="80" y="586" width="70" height="16" />
 		</element>
-		<element name="lamp1" ref="lamp_blue">
+		<element name="lamp1" ref="lamp_blue" inputtag="STROBE0" inputmask="0x02">
 			<bounds x="157" y="586" width="70" height="16" />
 		</element>
-		<element name="lamp2" ref="lamp_pink">
+		<element name="lamp2" ref="lamp_pink" inputtag="STROBE0" inputmask="0x04">
 			<bounds x="234" y="586" width="70" height="16" />
 		</element>
-		<element name="lamp3" ref="lamp">
+		<element name="lamp3" ref="lamp" inputtag="STROBE0" inputmask="0x08">
 			<bounds x="311" y="586" width="70" height="16" />
 		</element>
-		<element name="lamp4" ref="lamp">
+		<element name="lamp4" ref="lamp" inputtag="STROBE0" inputmask="0x10">
 			<bounds x="388" y="586" width="70" height="16" />
 		</element>
-		<element name="lamp5" ref="lamp_orange">
+		<element name="lamp5" ref="lamp_orange" inputtag="STROBE0" inputmask="0x20">
 			<bounds x="465" y="586" width="70" height="16" />
 		</element>
-		<element name="lamp6" ref="lamp_green">
+		<element name="lamp6" ref="lamp_green" inputtag="STROBE0" inputmask="0x40">
 			<bounds x="542" y="586" width="70" height="16" />
 		</element>
-		<element name="lamp7" ref="lamp_red">
+		<element name="lamp7" ref="lamp_red" inputtag="STROBE0" inputmask="0x80">
 			<bounds x="619" y="586" width="70" height="16" />
 		</element>
 
@@ -201,9 +201,21 @@ copyright-holders:MagikalUnicorn
 			</element>
 		</repeat>
 
-		<repeat count="8">
+		<repeat count="5">
 			<param name="n" start="8" increment="1" />
 			<param name="x" start="80" increment="77" />
+			<param name="mask" start="0x01" lshift="1" />
+			<element name="lamp~n~" ref="lamp" inputtag="STROBE1" inputmask="~mask~">
+				<bounds x="~x~" y="607" width="70" height="16" />
+			</element>
+			<element ref="lamp_label_~n~">
+				<bounds x="~x~" y="607" width="70" height="16" />
+			</element>
+		</repeat>
+
+		<repeat count="3">
+			<param name="n" start="13" increment="1" />
+			<param name="x" start="465" increment="77" />
 			<element name="lamp~n~" ref="lamp">
 				<bounds x="~x~" y="607" width="70" height="16" />
 			</element>
