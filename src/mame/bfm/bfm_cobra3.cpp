@@ -721,7 +721,9 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	scsi.set_external_device(6, m_scsic);
 	m_scsic->drq_handler().set(m_maincpu, FUNC(m68340_cpu_device::dma_dreq1_w)).invert();
 
-	WATCHDOG_TIMER(config, m_watchdog).set_time(PERIOD_OF_555_MONOSTABLE(120000,100e-9)); //TODO: Check timings
+	// Provisional values match the watchdog model used by earlier Bellfruit drivers.
+	// TODO: Confirm the R/C values against Cobra 3 hardware.
+	WATCHDOG_TIMER(config, m_watchdog).set_time(PERIOD_OF_555_MONOSTABLE(RES_K(120), CAP_N(100)));
 	METERS(config, m_meters).set_number(4);
 }
 
