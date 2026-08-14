@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders:David Haywood, James Wallace, blueonesarefaster
+// copyright-holders:David Haywood, James Wallace, blueonesarefaster, MagikalUnicorn
 
 /* Bellfruit SWP (Skill With Prizes) Video hardware
     aka Cobra 3
