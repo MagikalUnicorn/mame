@@ -112,7 +112,8 @@ class c3_telly_state : public bfm_cobra3_state
 {
 public:
 	c3_telly_state(const machine_config &mconfig, device_type type, const char *tag) :
-		bfm_cobra3_state(mconfig, type, tag)
+		bfm_cobra3_state(mconfig, type, tag),
+		m_initial_tube_level(*this, "TUBE%u", 0U)
 	{ }
 
 	void c3_telly(machine_config &config) ATTR_COLD;
@@ -124,13 +125,16 @@ public:
 
 protected:
 	virtual void machine_start() override ATTR_COLD;
+	virtual void machine_reset() override ATTR_COLD;
 	virtual void update_meters(uint16_t data) override;
 	virtual void cabinet_outputs_w(uint16_t data) override;
 
 private:
+	required_ioport_array<2> m_initial_tube_level;
 	uint8_t m_triac_latch;
 	uint16_t m_pound_tube_level;
 	uint16_t m_twenty_p_tube_level;
+	bool m_tube_levels_initialized;
 };
 
 void bfm_cobra3_state::update_lamps()
@@ -553,6 +557,12 @@ static INPUT_PORTS_START( c3_telly )
 	PORT_DIPSETTING(    0x40, "35%" )
 	PORT_DIPSETTING(    0x80, "40%" )
 	PORT_DIPSETTING(    0xc0, "50%" )
+
+	PORT_START("TUBE0")
+	PORT_ADJUSTER(40, u8"Initial £1 Tube Level") PORT_MINMAX(0, 40)
+
+	PORT_START("TUBE1")
+	PORT_ADJUSTER(150, "Initial 20p Tube Level") PORT_MINMAX(0, 150)
 INPUT_PORTS_END
 
 
@@ -566,6 +576,7 @@ void bfm_cobra3_state::machine_start()
 	m_meter_latch = 0;
 	m_mainram = make_unique_clear<uint16_t[]>((1024 * 16) / 2);
 	m_nvram->set_base(m_mainram.get(), 1024 * 16);
+	save_pointer(NAME(m_mainram), (1024 * 16) / 2);
 
 	save_item(NAME(m_active_strobe));
 	save_item(NAME(m_vol_clock));
@@ -581,12 +592,24 @@ void c3_telly_state::machine_start()
 	bfm_cobra3_state::machine_start();
 
 	m_triac_latch = 0;
-	m_pound_tube_level = 40; // £40 capacity in £1 coins
-	m_twenty_p_tube_level = 150; // £30 capacity in 20p coins
+	m_pound_tube_level = 0;
+	m_twenty_p_tube_level = 0;
+	m_tube_levels_initialized = false;
 
 	save_item(NAME(m_triac_latch));
 	save_item(NAME(m_pound_tube_level));
 	save_item(NAME(m_twenty_p_tube_level));
+	save_item(NAME(m_tube_levels_initialized));
+}
+
+void c3_telly_state::machine_reset()
+{
+	if (!m_tube_levels_initialized)
+	{
+		m_pound_tube_level = m_initial_tube_level[0]->read(); // £40 capacity in £1 coins
+		m_twenty_p_tube_level = m_initial_tube_level[1]->read(); // £30 capacity in 20p coins
+		m_tube_levels_initialized = true;
+	}
 }
 
 
@@ -712,7 +735,7 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	m_scc66470->set_screen("screen");
 	m_scc66470->irq().set(FUNC(bfm_cobra3_state::scc66470_irq));
 
-	STI3400(config, m_sti3400, 0);
+	STI3400(config, m_sti3400, 0); // decoder core and external-memory cycle timing are not modelled
 	m_sti3400->irq().set_inputline(m_maincpu, 6);
 
 	auto &scsi(NSCSI_BUS(config, m_scsibus));
