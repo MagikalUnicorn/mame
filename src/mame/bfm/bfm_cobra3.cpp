@@ -122,12 +122,10 @@ public:
 	int pound_tube_low_r();
 	int twenty_p_tube_low_r();
 	DECLARE_INPUT_CHANGED_MEMBER(coin_inserted);
-	DECLARE_INPUT_CHANGED_MEMBER(doors_changed);
 
 protected:
 	virtual void machine_start() override ATTR_COLD;
 	virtual void machine_reset() override ATTR_COLD;
-	virtual void update_meters(uint16_t data) override;
 	virtual void cabinet_outputs_w(uint16_t data) override;
 
 private:
@@ -165,15 +163,6 @@ void bfm_cobra3_state::update_meters(uint16_t data)
 
 	for (unsigned i = 0; i < 4; i++)
 		m_meters->update(i, BIT(m_meter_latch, i));
-}
-
-void c3_telly_state::update_meters(uint16_t data)
-{
-	m_meter_latch = data & 0x0f;
-	bool const powered = !BIT(m_strobein[2]->read(), 4);
-
-	for (unsigned i = 0; i < 2; i++)
-		m_meters->update(i, powered && BIT(m_meter_latch, i));
 }
 
 void c3_telly_state::cabinet_outputs_w(uint16_t data)
@@ -269,11 +258,6 @@ INPUT_CHANGED_MEMBER(c3_telly_state::coin_inserted)
 		m_pound_tube_level++;
 	else if ((param == 20) && (m_twenty_p_tube_level < 150)) // £30 capacity
 		m_twenty_p_tube_level++;
-}
-
-INPUT_CHANGED_MEMBER(c3_telly_state::doors_changed)
-{
-	update_meters(m_meter_latch);
 }
 
 uint16_t bfm_cobra3_state::mem_r(offs_t offset, uint16_t mem_mask)
@@ -540,7 +524,7 @@ static INPUT_PORTS_START( c3_telly )
 	PORT_CONFSETTING(    0x00, "Not Fitted" )
 	PORT_CONFSETTING(    0x04, "Fitted" )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Cash Door") PORT_CODE(KEYCODE_Y) PORT_TOGGLE
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Back and Front Doors") PORT_CODE(KEYCODE_T) PORT_TOGGLE PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(c3_telly_state::doors_changed), 0)
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Back and Front Doors") PORT_CODE(KEYCODE_T) PORT_TOGGLE
 	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_SERVICE ) PORT_NAME("Refill Key (Volume Setup)") PORT_CODE(KEYCODE_R) PORT_TOGGLE
 	PORT_BIT( 0xc0, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 
