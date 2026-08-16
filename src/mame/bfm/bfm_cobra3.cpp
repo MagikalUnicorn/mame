@@ -114,7 +114,7 @@ class c3_telly_state : public bfm_cobra3_state
 public:
 	c3_telly_state(const machine_config &mconfig, device_type type, const char *tag) :
 		bfm_cobra3_state(mconfig, type, tag),
-		m_initial_tube_level(*this, "TUBE%u", 0U)
+		m_initial_tube_fill(*this, "TUBE%u", 0U)
 	{ }
 
 	void c3_telly(machine_config &config) ATTR_COLD;
@@ -131,7 +131,7 @@ protected:
 	virtual void cabinet_outputs_w(uint16_t data) override;
 
 private:
-	required_ioport_array<2> m_initial_tube_level;
+	required_ioport_array<2> m_initial_tube_fill;
 	uint8_t m_triac_latch;
 	uint16_t m_pound_tube_level;
 	uint16_t m_twenty_p_tube_level;
@@ -560,10 +560,10 @@ static INPUT_PORTS_START( c3_telly )
 	PORT_DIPSETTING(    0xc0, "50%" )
 
 	PORT_START("TUBE0")
-	PORT_ADJUSTER(40, u8"Initial £1 Tube Level") PORT_MINMAX(0, 40)
+	PORT_ADJUSTER(100, u8"Initial £1 Tube Fill")
 
 	PORT_START("TUBE1")
-	PORT_ADJUSTER(150, "Initial 20p Tube Level") PORT_MINMAX(0, 150)
+	PORT_ADJUSTER(100, "Initial 20p Tube Fill")
 INPUT_PORTS_END
 
 
@@ -607,8 +607,8 @@ void c3_telly_state::machine_reset()
 {
 	if (!m_tube_levels_initialized)
 	{
-		m_pound_tube_level = m_initial_tube_level[0]->read(); // £40 capacity in £1 coins
-		m_twenty_p_tube_level = m_initial_tube_level[1]->read(); // £30 capacity in 20p coins
+		m_pound_tube_level = (m_initial_tube_fill[0]->read() * 40 + 50) / 100; // £40 capacity in £1 coins
+		m_twenty_p_tube_level = (m_initial_tube_fill[1]->read() * 150 + 50) / 100; // £30 capacity in 20p coins
 		m_tube_levels_initialized = true;
 	}
 }
