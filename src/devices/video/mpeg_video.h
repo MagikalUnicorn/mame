@@ -14,12 +14,21 @@
 
 #pragma once
 
+class device_t;
+
 class mpeg_video
 {
 public:
+	enum class decode_result
+	{
+		DECODED,
+		NEED_DATA,
+		INVALID_DATA
+	};
+
 	// base = start of the MPEG video data block
 
-	mpeg_video(const void *base);
+	mpeg_video(const void *base, int maximum_width, int maximum_height);
 
 	// Decode one MPEG coded picture or sequence-end marker.
 	// pos          = position in bits relative to base
@@ -32,14 +41,18 @@ public:
 	// frame_rate   = sequence picture rate
 	// frame_valid  = true if a complete display-order picture was written
 	//
-	// returns true if a complete coded picture or sequence-end marker was
-	// consumed and updates pos, false if more input data is required
+	// returns DECODED if a complete coded picture or sequence-end marker was
+	// consumed, NEED_DATA if more input is required, or INVALID_DATA if invalid
+	// syntax was skipped.  pos is updated to the first unconsumed bit.
 
-	bool decode_buffer(int &pos, int limit, u32 *output, int output_pitch, int output_rows,
+	decode_result decode_buffer(int &pos, int limit, u32 *output, int output_pitch, int output_rows,
 						int &width, int &height, double &frame_rate, bool &frame_valid);
 
 	// Clear sequence and reference-picture state.
 	void clear();
+
+	// Register persistent decoding state with an owning device.
+	void register_save_state(device_t &device, int index = 0);
 
 private:
 	struct limit_hit { };
@@ -81,6 +94,8 @@ private:
 	static const double s_picture_rates[16];
 
 	const u8 *m_base;
+	int m_maximum_width;
+	int m_maximum_height;
 	int m_current_pos;
 	int m_current_limit;
 
@@ -124,7 +139,8 @@ private:
 	void skipped_macroblock(int address);
 	void block(unsigned index, bool intra);
 
-	void resize_frames();
+	void reset_reference_frames();
+	void copy_state(const mpeg_video &source);
 	void reset_dc_predictors();
 	void decode_motion_vector(bool forward, motion_vector &vector);
 	int decode_motion_component(int code, int residual, int f, int &previous, bool full_pel);

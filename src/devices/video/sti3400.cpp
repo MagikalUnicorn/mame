@@ -14,6 +14,7 @@
 #include "mpeg_video.h"
 
 #define LOG_START_CODES (1U << 1)
+#define LOG_INVALID_DATA (1U << 2)
 
 #define VERBOSE (0)
 #include "logmacro.h"
@@ -71,7 +72,8 @@ sti3400_device::~sti3400_device() = default;
 void sti3400_device::device_start()
 {
 	m_decode_timer = timer_alloc(FUNC(sti3400_device::decode_tick), this);
-	decoder_create();
+	m_decoder->decoder = std::make_unique<mpeg_video>(m_decoder->input.data(), MAX_VIDEO_WIDTH, MAX_VIDEO_HEIGHT);
+	m_decoder->decoder->register_save_state(*this);
 
 	save_item(NAME(m_registers));
 	save_item(NAME(m_fifo));
@@ -136,9 +138,14 @@ void sti3400_device::device_reset()
 	m_decoder->presentation_requests = 0;
 	m_decoder->valid = false;
 	m_decoder->frame_pending = false;
-	decoder_create();
+	m_decoder->decoder->clear();
 	m_irq_cb(CLEAR_LINE);
 	m_decode_timer->adjust(attotime::from_hz(FALLBACK_FRAME_RATE));
+}
+
+void sti3400_device::device_post_load()
+{
+	m_irq_cb(m_irq_state ? ASSERT_LINE : CLEAR_LINE);
 }
 
 void sti3400_device::decoder_soft_reset()
@@ -169,23 +176,18 @@ void sti3400_device::decoder_soft_reset()
 	m_decoder->presentation_requests = 0;
 	m_decoder->valid = false;
 	m_decoder->frame_pending = false;
-	decoder_create();
+	m_decoder->decoder->clear();
 	update_status();
 }
 
-void sti3400_device::decoder_create()
-{
-	m_decoder->decoder = std::make_unique<mpeg_video>(m_decoder->input.data());
-}
-
-bool sti3400_device::decode_frame(bool &frame_valid)
+sti3400_device::frame_decode_result sti3400_device::decode_frame(bool &frame_valid)
 {
 	int position = m_decoder->input_bit_position;
 	int width = m_decoder->decoded_width;
 	int height = m_decoder->decoded_height;
 	double frame_rate = m_decoder->frame_rate;
 	frame_valid = false;
-	if (!m_decoder->decoder->decode_buffer(
+	const mpeg_video::decode_result result = m_decoder->decoder->decode_buffer(
 			position,
 			m_decoder->input_bytes * 8,
 			m_decoder->video.data() + (m_decoder->decode_buffer * MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT),
@@ -194,20 +196,23 @@ bool sti3400_device::decode_frame(bool &frame_valid)
 			width,
 			height,
 			frame_rate,
-			frame_valid))
-	{
-		return false;
-	}
+			frame_valid);
 
-	m_decoder->decoded_width = width;
-	m_decoder->decoded_height = height;
-	m_decoder->frame_rate = frame_rate;
-	// DFP selects which reconstructed picture is shown.  The software decoder
-	// supplies pictures in display order, so each DFP write grants one display slot.
-	if (frame_valid && m_decoder->presentation_requests)
+	if (result == mpeg_video::decode_result::DECODED)
 	{
-		m_decoder->frame_pending = true;
-		m_decoder->presentation_requests--;
+		m_decoder->decoded_width = width;
+		m_decoder->decoded_height = height;
+		m_decoder->frame_rate = frame_rate;
+		if (frame_valid && m_decoder->presentation_requests)
+		{
+			m_decoder->frame_pending = true;
+			m_decoder->presentation_requests--;
+		}
+	}
+	else if (result == mpeg_video::decode_result::INVALID_DATA)
+	{
+		LOGMASKED(LOG_INVALID_DATA, "%s: skipped invalid MPEG video data at byte %08x\n",
+			machine().describe_context(), u32(m_decode_position + (position / 8)));
 	}
 
 	const unsigned bytes_consumed = position / 8;
@@ -221,26 +226,36 @@ bool sti3400_device::decode_frame(bool &frame_valid)
 		m_decode_position += bytes_consumed;
 	}
 	m_decoder->input_bit_position = position & 7;
-	return true;
+
+	switch (result)
+	{
+	case mpeg_video::decode_result::DECODED:
+		return frame_decode_result::DECODED;
+	case mpeg_video::decode_result::INVALID_DATA:
+		return frame_decode_result::INVALID_DATA;
+	default:
+		return frame_decode_result::NEED_DATA;
+	}
 }
 
 TIMER_CALLBACK_MEMBER(sti3400_device::decode_tick)
 {
 	if ((m_registers[REG_CTL] & CTL_EDC) && !m_decoder->frame_pending)
 	{
-		bool decoded = false;
+		frame_decode_result result;
 		do
 		{
 			bool frame_valid = false;
-			decoded = decode_frame(frame_valid);
+			result = decode_frame(frame_valid);
 			if (frame_valid)
 				break;
 		}
-		while (decoded);
+		while (result != frame_decode_result::NEED_DATA);
 	}
 
 	update_status();
 	activate_event();
+	// Decoder throughput is not cycle-modelled; pace pictures at the encoded rate.
 	m_decode_timer->adjust(attotime::from_hz(m_decoder->frame_rate));
 }
 

@@ -26,6 +26,7 @@ public:
 protected:
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
+	virtual void device_post_load() override;
 
 private:
 	// STi3400 host-interface register addresses from the data sheet.
@@ -63,15 +64,22 @@ private:
 
 	// The hardware header FIFO is 256 bits wide.
 	static constexpr unsigned HEADER_FIFO_BYTES = 0x20;
-
 	// Software buffers cover the maximum amount representable by BBL.
 	static constexpr unsigned COMPRESSED_DATA_BUFFER_BYTES = 4U * 1024 * 1024;
 	static constexpr unsigned START_CODE_EVENT_COUNT = 256;
+	static_assert(std::has_single_bit(COMPRESSED_DATA_BUFFER_BYTES));
+	static_assert(std::has_single_bit(START_CODE_EVENT_COUNT));
+
+	enum class frame_decode_result
+	{
+		DECODED,
+		NEED_DATA,
+		INVALID_DATA
+	};
 
 	void stream_byte_w(u8 data);
 	void decoder_soft_reset();
-	void decoder_create();
-	bool decode_frame(bool &frame_valid);
+	frame_decode_result decode_frame(bool &frame_valid);
 	TIMER_CALLBACK_MEMBER(decode_tick);
 	void queue_start_code(u64 position, u8 code);
 	void activate_event();
