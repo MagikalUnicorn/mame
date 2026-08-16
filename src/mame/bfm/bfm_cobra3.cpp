@@ -14,6 +14,7 @@
 #include "bus/nscsi/cd.h"
 #include "bus/rs232/rs232.h"
 #include "machine/68340.h"
+#include "machine/bacta_datalogger.h"
 #include "machine/meters.h"
 #include "machine/ncr5380.h"
 #include "machine/nscsi_bus.h"
@@ -691,15 +692,14 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	m_maincpu->pa_out_callback().set(FUNC(bfm_cobra3_state::lamp_port_a_w));
 	mc68340_serial_module_device &serial(*m_maincpu->subdevice<mc68340_serial_module_device>("serial"));
 	serial.a_tx_cb().set("rs232_port1", FUNC(rs232_port_device::write_txd));
-	serial.b_tx_cb().set("rs232_port2", FUNC(rs232_port_device::write_txd));
+	serial.b_tx_cb().set("bacta", FUNC(bacta_datalogger_device::write_txd));
 
 	rs232_port_device &rs232_port1(RS232_PORT(config, "rs232_port1", default_rs232_devices, nullptr));
 	rs232_port1.rxd_handler().set(serial, FUNC(mc68340_serial_module_device::rx_a_w));
 	rs232_port1.cts_handler().set(serial, FUNC(mc68340_serial_module_device::ip0_w));
 
-	rs232_port_device &rs232_port2(RS232_PORT(config, "rs232_port2", default_rs232_devices, nullptr));
-	rs232_port2.rxd_handler().set(serial, FUNC(mc68340_serial_module_device::rx_b_w));
-	rs232_port2.cts_handler().set(serial, FUNC(mc68340_serial_module_device::ip1_w));
+	bacta_datalogger_device &bacta(BACTA_DATALOGGER(config, "bacta"));
+	bacta.rxd_handler().set(serial, FUNC(mc68340_serial_module_device::rx_b_w));
 
 	NVRAM(config, "nvram", nvram_device::DEFAULT_ALL_0);
 
