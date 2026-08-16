@@ -43,26 +43,29 @@ DEFINE_DEVICE_TYPE(STI3400, sti3400_device, "sti3400", "SGS-Thomson STi3400 MPEG
 struct sti3400_device::decoder_state
 {
 	std::array<u8, COMPRESSED_DATA_BUFFER_BYTES> input{};
-	std::array<u32, 2 * MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT> video{};
+	std::vector<u8> dram;
+	std::vector<u8> picture_valid;
 	std::unique_ptr<mpeg_video> decoder;
 	unsigned input_bytes = 0;
 	unsigned input_bit_position = 0;
-	unsigned display_buffer = 0;
-	unsigned decode_buffer = 1;
+	u16 display_pointer = 0;
+	u16 reconstructed_pointer = 0;
+	u16 forward_pointer = 0;
+	u16 backward_pointer = 0;
 	u16 width = 0;
 	u16 height = 0;
 	u16 decoded_width = 0;
 	u16 decoded_height = 0;
 	double frame_rate = FALLBACK_FRAME_RATE;
-	unsigned presentation_requests = 0;
-	bool valid = false;
-	bool frame_pending = false;
+	bool task_active = false;
+	bool repeat_pending = false;
 };
 
 sti3400_device::sti3400_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock) :
 	device_t(mconfig, STI3400, tag, owner, clock),
 	m_irq_cb(*this),
 	m_decoder(std::make_unique<decoder_state>()),
+	m_dram_size(0),
 	m_decode_timer(nullptr)
 {
 }
@@ -71,7 +74,12 @@ sti3400_device::~sti3400_device() = default;
 
 void sti3400_device::device_start()
 {
+	if (!m_dram_size || !std::has_single_bit(m_dram_size) || (m_dram_size % BIT_BUFFER_LEVEL_UNIT_BYTES))
+		fatalerror("%s: picture DRAM size must be a power-of-two multiple of 256 bytes\n", tag());
+
 	m_decode_timer = timer_alloc(FUNC(sti3400_device::decode_tick), this);
+	m_decoder->dram.resize(m_dram_size);
+	m_decoder->picture_valid.resize(m_dram_size / BIT_BUFFER_LEVEL_UNIT_BYTES);
 	m_decoder->decoder = std::make_unique<mpeg_video>(m_decoder->input.data(), MAX_VIDEO_WIDTH, MAX_VIDEO_HEIGHT);
 	m_decoder->decoder->register_save_state(*this);
 
@@ -91,19 +99,21 @@ void sti3400_device::device_start()
 	save_item(NAME(m_event_active));
 	save_item(NAME(m_irq_state));
 	save_item(NAME(m_decoder->input));
-	save_item(NAME(m_decoder->video));
+	save_item(NAME(m_decoder->dram));
+	save_item(NAME(m_decoder->picture_valid));
 	save_item(NAME(m_decoder->input_bytes));
 	save_item(NAME(m_decoder->input_bit_position));
-	save_item(NAME(m_decoder->display_buffer));
-	save_item(NAME(m_decoder->decode_buffer));
+	save_item(NAME(m_decoder->display_pointer));
+	save_item(NAME(m_decoder->reconstructed_pointer));
+	save_item(NAME(m_decoder->forward_pointer));
+	save_item(NAME(m_decoder->backward_pointer));
 	save_item(NAME(m_decoder->width));
 	save_item(NAME(m_decoder->height));
 	save_item(NAME(m_decoder->decoded_width));
 	save_item(NAME(m_decoder->decoded_height));
 	save_item(NAME(m_decoder->frame_rate));
-	save_item(NAME(m_decoder->presentation_requests));
-	save_item(NAME(m_decoder->valid));
-	save_item(NAME(m_decoder->frame_pending));
+	save_item(NAME(m_decoder->task_active));
+	save_item(NAME(m_decoder->repeat_pending));
 }
 
 void sti3400_device::device_reset()
@@ -125,22 +135,23 @@ void sti3400_device::device_reset()
 	m_event_active = false;
 	m_irq_state = false;
 	m_decoder->input.fill(0);
-	m_decoder->video.fill(0);
+	std::fill(m_decoder->picture_valid.begin(), m_decoder->picture_valid.end(), 0);
 	m_decoder->input_bytes = 0;
 	m_decoder->input_bit_position = 0;
-	m_decoder->display_buffer = 0;
-	m_decoder->decode_buffer = 1;
+	m_decoder->display_pointer = 0;
+	m_decoder->reconstructed_pointer = 0;
+	m_decoder->forward_pointer = 0;
+	m_decoder->backward_pointer = 0;
 	m_decoder->width = 0;
 	m_decoder->height = 0;
 	m_decoder->decoded_width = 0;
 	m_decoder->decoded_height = 0;
 	m_decoder->frame_rate = FALLBACK_FRAME_RATE;
-	m_decoder->presentation_requests = 0;
-	m_decoder->valid = false;
-	m_decoder->frame_pending = false;
+	m_decoder->task_active = false;
+	m_decoder->repeat_pending = false;
 	m_decoder->decoder->clear();
 	m_irq_cb(CLEAR_LINE);
-	m_decode_timer->adjust(attotime::from_hz(FALLBACK_FRAME_RATE));
+	m_decode_timer->adjust(attotime::never);
 }
 
 void sti3400_device::device_post_load()
@@ -163,20 +174,22 @@ void sti3400_device::decoder_soft_reset()
 	m_event_count = 0;
 	m_event_active = false;
 	m_decoder->input.fill(0);
-	m_decoder->video.fill(0);
+	std::fill(m_decoder->picture_valid.begin(), m_decoder->picture_valid.end(), 0);
 	m_decoder->input_bytes = 0;
 	m_decoder->input_bit_position = 0;
-	m_decoder->display_buffer = 0;
-	m_decoder->decode_buffer = 1;
+	m_decoder->display_pointer = 0;
+	m_decoder->reconstructed_pointer = 0;
+	m_decoder->forward_pointer = 0;
+	m_decoder->backward_pointer = 0;
 	m_decoder->width = 0;
 	m_decoder->height = 0;
 	m_decoder->decoded_width = 0;
 	m_decoder->decoded_height = 0;
 	m_decoder->frame_rate = FALLBACK_FRAME_RATE;
-	m_decoder->presentation_requests = 0;
-	m_decoder->valid = false;
-	m_decoder->frame_pending = false;
+	m_decoder->task_active = false;
+	m_decoder->repeat_pending = false;
 	m_decoder->decoder->clear();
+	m_decode_timer->adjust(attotime::never);
 	update_status();
 }
 
@@ -187,12 +200,21 @@ sti3400_device::frame_decode_result sti3400_device::decode_frame(bool &frame_val
 	int height = m_decoder->decoded_height;
 	double frame_rate = m_decoder->frame_rate;
 	frame_valid = false;
+	auto const picture_buffer = [this] (u16 pointer)
+	{
+		const unsigned base = (unsigned(pointer) * BIT_BUFFER_LEVEL_UNIT_BYTES) & (m_dram_size - 1);
+		return mpeg_video::picture_buffer{ m_decoder->dram.data() + base, m_dram_size - base };
+	};
+	const mpeg_video::picture_buffers buffers
+	{
+		picture_buffer(m_decoder->reconstructed_pointer),
+		picture_buffer(m_decoder->forward_pointer),
+		picture_buffer(m_decoder->backward_pointer)
+	};
 	const mpeg_video::decode_result result = m_decoder->decoder->decode_buffer(
 			position,
 			m_decoder->input_bytes * 8,
-			m_decoder->video.data() + (m_decoder->decode_buffer * MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT),
-			MAX_VIDEO_WIDTH,
-			MAX_VIDEO_HEIGHT,
+			buffers,
 			width,
 			height,
 			frame_rate,
@@ -203,10 +225,10 @@ sti3400_device::frame_decode_result sti3400_device::decode_frame(bool &frame_val
 		m_decoder->decoded_width = width;
 		m_decoder->decoded_height = height;
 		m_decoder->frame_rate = frame_rate;
-		if (frame_valid && m_decoder->presentation_requests)
+		if (frame_valid)
 		{
-			m_decoder->frame_pending = true;
-			m_decoder->presentation_requests--;
+			const unsigned picture = m_decoder->reconstructed_pointer & (m_decoder->picture_valid.size() - 1);
+			m_decoder->picture_valid[picture] = 1;
 		}
 	}
 	else if (result == mpeg_video::decode_result::INVALID_DATA)
@@ -240,7 +262,7 @@ sti3400_device::frame_decode_result sti3400_device::decode_frame(bool &frame_val
 
 TIMER_CALLBACK_MEMBER(sti3400_device::decode_tick)
 {
-	if ((m_registers[REG_CTL] & CTL_EDC) && !m_decoder->frame_pending)
+	if (m_decoder->task_active)
 	{
 		frame_decode_result result;
 		do
@@ -251,12 +273,15 @@ TIMER_CALLBACK_MEMBER(sti3400_device::decode_tick)
 				break;
 		}
 		while (result != frame_decode_result::NEED_DATA);
+
+		if (result != frame_decode_result::NEED_DATA)
+			m_decoder->task_active = false;
+		else
+			m_decode_timer->adjust(attotime::from_hz(m_decoder->frame_rate));
 	}
 
 	update_status();
 	activate_event();
-	// Decoder throughput is not cycle-modelled; pace pictures at the encoded rate.
-	m_decode_timer->adjust(attotime::from_hz(m_decoder->frame_rate));
 }
 
 void sti3400_device::vblank_w(int state)
@@ -264,21 +289,26 @@ void sti3400_device::vblank_w(int state)
 	if (!state)
 		return;
 
-	// Present only complete pictures, and only while the display is outside its visible area.
-	if (m_decoder->frame_pending)
-	{
-		std::swap(m_decoder->display_buffer, m_decoder->decode_buffer);
-		m_decoder->width = m_decoder->decoded_width;
-		m_decoder->height = m_decoder->decoded_height;
-		m_decoder->valid = true;
-		m_decoder->frame_pending = false;
-	}
+	// DFP is double-buffered by the hardware and becomes active at VSYNC.
+	m_decoder->display_pointer = m_registers[REG_DFP] & PICTURE_POINTER_MASK;
+	m_decoder->width = m_decoder->decoded_width;
+	m_decoder->height = m_decoder->decoded_height;
 
 	// A VSYNC-generated DSYNC starts the next task and restarts automatic start-code detection.
-	if ((m_registers[REG_CTL] & CTL_EDC) && !(m_registers[REG_CTL] & CTL_DVS) &&
-		!(m_registers[REG_INS] & INS_WAIT) && m_event_active)
+	if (m_decoder->repeat_pending)
 	{
+		m_decoder->repeat_pending = false;
+	}
+	else if ((m_registers[REG_CTL] & CTL_EDC) && !(m_registers[REG_CTL] & CTL_DVS) &&
+		!(m_registers[REG_INS] & INS_WAIT) && m_event_active && !m_decoder->task_active)
+	{
+		m_decoder->reconstructed_pointer = m_registers[REG_RFP] & PICTURE_POINTER_MASK;
+		m_decoder->forward_pointer = m_registers[REG_FFP] & PICTURE_POINTER_MASK;
+		m_decoder->backward_pointer = m_registers[REG_BFP] & PICTURE_POINTER_MASK;
+		m_decoder->task_active = true;
+		m_decoder->repeat_pending = bool(m_registers[REG_INS] & INS_RPT);
 		finish_event();
+		m_decode_timer->adjust(attotime::zero);
 	}
 }
 
@@ -313,7 +343,8 @@ void sti3400_device::stream_byte_w(u8 data)
 
 bool sti3400_device::video_valid() const
 {
-	return m_decoder->valid;
+	const unsigned picture = m_decoder->display_pointer & (m_decoder->picture_valid.size() - 1);
+	return m_decoder->picture_valid[picture];
 }
 
 u16 sti3400_device::video_width() const
@@ -328,14 +359,19 @@ u16 sti3400_device::video_height() const
 
 u32 sti3400_device::video_pixel(unsigned x, unsigned y) const
 {
-	if (!m_decoder->valid || (x >= m_decoder->width) || (y >= m_decoder->height))
+	if (!video_valid() || (x >= m_decoder->width) || (y >= m_decoder->height))
 		return 0;
 
-	const unsigned buffer_offset = m_decoder->display_buffer * MAX_VIDEO_WIDTH * MAX_VIDEO_HEIGHT;
-	const u32 ycbcr = m_decoder->video[buffer_offset + y * MAX_VIDEO_WIDTH + x];
-	const int luminance = ycbcr & 0xff;
-	const int cb = ((ycbcr >> 8) & 0xff) - 128;
-	const int cr = ((ycbcr >> 16) & 0xff) - 128;
+	const unsigned mask = m_dram_size - 1;
+	const unsigned base = (unsigned(m_decoder->display_pointer) * BIT_BUFFER_LEVEL_UNIT_BYTES) & mask;
+	const unsigned luma_pitch = (m_decoder->width + 15) & ~15;
+	const unsigned luma_rows = (m_decoder->height + 15) & ~15;
+	const unsigned luma_bytes = luma_pitch * luma_rows;
+	const unsigned chroma_pitch = luma_pitch / 2;
+	const unsigned chroma_bytes = chroma_pitch * luma_rows / 2;
+	const int luminance = m_decoder->dram[(base + y * luma_pitch + x) & mask];
+	const int cb = m_decoder->dram[(base + luma_bytes + (y / 2) * chroma_pitch + x / 2) & mask] - 128;
+	const int cr = m_decoder->dram[(base + luma_bytes + chroma_bytes + (y / 2) * chroma_pitch + x / 2) & mask] - 128;
 	const int scaled_luminance = 298 * (luminance - 16);
 	const u8 red = std::clamp((scaled_luminance + 409 * cr + 128) >> 8, 0, 255);
 	const u8 green = std::clamp((scaled_luminance - 100 * cb - 208 * cr + 128) >> 8, 0, 255);
@@ -409,8 +445,7 @@ u16 sti3400_device::decoder_status() const
 	const u16 level = bit_buffer_level();
 	u16 status = 0;
 
-	// The stub does not model picture-task execution state.
-	if (!(m_registers[REG_CTL] & CTL_EDC))
+	if (!m_decoder->task_active)
 		status |= STA_PID;
 	if (!level || (level < (m_registers[REG_BBB] & BIT_BUFFER_LEVEL_MASK)))
 		status |= STA_BBE;
@@ -477,6 +512,18 @@ u16 sti3400_device::read(offs_t offset, u16 mem_mask)
 	case REG_BBL:
 		return bit_buffer_level();
 
+	case REG_DFP:
+		return m_decoder->display_pointer;
+
+	case REG_RFP:
+		return m_decoder->reconstructed_pointer;
+
+	case REG_FFP:
+		return m_decoder->forward_pointer;
+
+	case REG_BFP:
+		return m_decoder->backward_pointer;
+
 	case REG_ITS:
 	{
 		const u16 result = m_interrupt_status;
@@ -525,10 +572,6 @@ void sti3400_device::write(offs_t offset, u16 data, u16 mem_mask)
 
 	case REG_HDS:
 		finish_event();
-		break;
-
-	case REG_DFP:
-		m_decoder->presentation_requests++;
 		break;
 
 	case REG_BBB:

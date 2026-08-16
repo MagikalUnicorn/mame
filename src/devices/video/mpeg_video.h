@@ -26,6 +26,19 @@ public:
 		INVALID_DATA
 	};
 
+	struct picture_buffer
+	{
+		u8 *data;
+		unsigned bytes;
+	};
+
+	struct picture_buffers
+	{
+		picture_buffer reconstructed;
+		picture_buffer forward;
+		picture_buffer backward;
+	};
+
 	// base = start of the MPEG video data block
 
 	mpeg_video(const void *base, int maximum_width, int maximum_height);
@@ -33,19 +46,17 @@ public:
 	// Decode one MPEG coded picture or sequence-end marker.
 	// pos          = position in bits relative to base
 	// limit        = maximum accepted position in bits
-	// output       = output pixels packed as Cr:Cb:Y
-	// output_pitch = number of pixels between adjacent output rows
-	// output_rows  = number of rows available in output
+	// buffers      = reconstructed, forward and backward YCbCr picture buffers
 	// width        = width of a completed output picture
 	// height       = height of a completed output picture
 	// frame_rate   = sequence picture rate
-	// frame_valid  = true if a complete display-order picture was written
+	// frame_valid  = true if a complete reconstructed picture was written
 	//
 	// returns DECODED if a complete coded picture or sequence-end marker was
 	// consumed, NEED_DATA if more input is required, or INVALID_DATA if invalid
 	// syntax was skipped.  pos is updated to the first unconsumed bit.
 
-	decode_result decode_buffer(int &pos, int limit, u32 *output, int output_pitch, int output_rows,
+	decode_result decode_buffer(int &pos, int limit, const picture_buffers &buffers,
 						int &width, int &height, double &frame_rate, bool &frame_valid);
 
 	// Clear sequence and reference-picture state.
@@ -125,21 +136,20 @@ private:
 	bool m_previous_b_backward;
 
 	frame m_current_frame;
-	frame m_past_reference;
-	frame m_future_reference;
-	bool m_have_past_reference;
-	bool m_have_future_reference;
+	frame m_forward_reference;
+	frame m_backward_reference;
+	bool m_have_forward_reference;
+	bool m_have_backward_reference;
 	double m_cosine[8][8];
 
 	void sequence_header();
 	void group_of_pictures();
-	bool picture(u32 *output, int output_pitch, int output_rows);
+	bool picture(const picture_buffers &buffers);
 	void slice(unsigned vertical_position);
 	void macroblock(bool first_in_slice);
 	void skipped_macroblock(int address);
 	void block(unsigned index, bool intra);
 
-	void reset_reference_frames();
 	void copy_state(const mpeg_video &source);
 	void reset_dc_predictors();
 	void decode_motion_vector(bool forward, motion_vector &vector);
@@ -149,7 +159,8 @@ private:
 					int x, int y, int width, int height, motion_vector vector, bool chroma, bool average);
 	void put_block(unsigned index, const int *values, bool intra);
 	void inverse_dct(const int *coefficients, int *values) const;
-	void write_frame(const frame &source, u32 *output, int output_pitch, int output_rows) const;
+	void read_frame(frame &destination, const u8 *source, unsigned source_bytes) const;
+	void write_frame(const frame &source, u8 *output, unsigned output_bytes) const;
 
 	int macroblock_address_increment();
 	macroblock_type macroblock_type_code();

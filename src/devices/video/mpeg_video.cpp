@@ -346,7 +346,7 @@ mpeg_video::mpeg_video(const void *base, int maximum_width, int maximum_height) 
 	const unsigned maximum_mb_height = (m_maximum_height + 15) / 16;
 	const unsigned luma_size = maximum_mb_width * 16 * maximum_mb_height * 16;
 	const unsigned chroma_size = maximum_mb_width * 8 * maximum_mb_height * 8;
-	for (frame *const item : { &m_current_frame, &m_past_reference, &m_future_reference })
+	for (frame *const item : { &m_current_frame, &m_forward_reference, &m_backward_reference })
 	{
 		item->y.resize(luma_size);
 		item->cb.resize(chroma_size);
@@ -392,8 +392,8 @@ void mpeg_video::clear()
 	m_backward_vertical_previous = 0;
 	m_previous_b_forward = false;
 	m_previous_b_backward = false;
-	m_have_past_reference = false;
-	m_have_future_reference = false;
+	m_have_forward_reference = false;
+	m_have_backward_reference = false;
 }
 
 void mpeg_video::register_save_state(device_t &device, int index)
@@ -421,20 +421,9 @@ void mpeg_video::register_save_state(device_t &device, int index)
 	device.save_item(m_backward_vertical_previous, "mpeg_video_backward_vertical_previous", index);
 	device.save_item(m_previous_b_forward, "mpeg_video_previous_b_forward", index);
 	device.save_item(m_previous_b_backward, "mpeg_video_previous_b_backward", index);
-	device.save_item(m_current_frame.y, "mpeg_video_current_y", index);
-	device.save_item(m_current_frame.cb, "mpeg_video_current_cb", index);
-	device.save_item(m_current_frame.cr, "mpeg_video_current_cr", index);
-	device.save_item(m_past_reference.y, "mpeg_video_past_y", index);
-	device.save_item(m_past_reference.cb, "mpeg_video_past_cb", index);
-	device.save_item(m_past_reference.cr, "mpeg_video_past_cr", index);
-	device.save_item(m_future_reference.y, "mpeg_video_future_y", index);
-	device.save_item(m_future_reference.cb, "mpeg_video_future_cb", index);
-	device.save_item(m_future_reference.cr, "mpeg_video_future_cr", index);
-	device.save_item(m_have_past_reference, "mpeg_video_have_past_reference", index);
-	device.save_item(m_have_future_reference, "mpeg_video_have_future_reference", index);
 }
 
-mpeg_video::decode_result mpeg_video::decode_buffer(int &pos, int limit, u32 *output, int output_pitch, int output_rows,
+mpeg_video::decode_result mpeg_video::decode_buffer(int &pos, int limit, const picture_buffers &buffers,
 		int &width, int &height, double &frame_rate, bool &frame_valid)
 {
 	if ((limit - pos) < 32)
@@ -466,7 +455,11 @@ mpeg_video::decode_result mpeg_video::decode_buffer(int &pos, int limit, u32 *ou
 				break;
 
 			case PICTURE_START_CODE:
-				frame_valid = candidate.picture(output, output_pitch, output_rows);
+				frame_valid = candidate.picture(buffers);
+				// A sequence-end code terminates the preceding coded sequence rather than
+				// describing another decoding task.
+				if (candidate.peek(32) == SEQUENCE_END_CODE)
+					candidate.gb(32);
 				scan_position = candidate.m_current_pos;
 				copy_state(candidate);
 				pos = scan_position;
@@ -477,13 +470,6 @@ mpeg_video::decode_result mpeg_video::decode_buffer(int &pos, int limit, u32 *ou
 
 			case SEQUENCE_END_CODE:
 				candidate.gb(32);
-				if (candidate.m_have_future_reference)
-				{
-					candidate.write_frame(candidate.m_future_reference, output, output_pitch, output_rows);
-					frame_valid = true;
-				}
-				candidate.m_have_past_reference = false;
-				candidate.m_have_future_reference = false;
 				scan_position = candidate.m_current_pos;
 				copy_state(candidate);
 				pos = scan_position;
@@ -578,7 +564,6 @@ void mpeg_video::sequence_header()
 		!s_picture_rates[picture_rate])
 		throw invalid_stream();
 
-	const bool dimensions_changed = (horizontal_size != m_horizontal_size) || (vertical_size != m_vertical_size);
 	m_horizontal_size = horizontal_size;
 	m_vertical_size = vertical_size;
 	m_frame_rate = s_picture_rates[picture_rate];
@@ -586,9 +571,6 @@ void mpeg_video::sequence_header()
 	m_mb_height = (m_vertical_size + 15) / 16;
 	m_luma_pitch = m_mb_width * 16;
 	m_chroma_pitch = m_mb_width * 8;
-
-	if (dimensions_changed)
-		reset_reference_frames();
 
 	next_start_code();
 	while ((peek(32) == EXTENSION_START_CODE) || (peek(32) == USER_DATA_START_CODE))
@@ -621,7 +603,7 @@ void mpeg_video::group_of_pictures()
 	}
 }
 
-bool mpeg_video::picture(u32 *output, int output_pitch, int output_rows)
+bool mpeg_video::picture(const picture_buffers &buffers)
 {
 	if (!m_horizontal_size || !m_vertical_size)
 		throw invalid_stream();
@@ -654,6 +636,19 @@ bool mpeg_video::picture(u32 *output, int output_pitch, int output_rows)
 	if ((m_picture_coding_type < 1) || (m_picture_coding_type > 4))
 		throw invalid_stream();
 
+	m_have_forward_reference = false;
+	m_have_backward_reference = false;
+	if ((m_picture_coding_type == 2) || (m_picture_coding_type == 3))
+	{
+		read_frame(m_forward_reference, buffers.forward.data, buffers.forward.bytes);
+		m_have_forward_reference = true;
+	}
+	if (m_picture_coding_type == 3)
+	{
+		read_frame(m_backward_reference, buffers.backward.data, buffers.backward.bytes);
+		m_have_backward_reference = true;
+	}
+
 	while (gb(1))
 		gb(8);
 	next_start_code();
@@ -664,9 +659,8 @@ bool mpeg_video::picture(u32 *output, int output_pitch, int output_rows)
 		next_start_code();
 	}
 
-	std::fill(m_current_frame.y.begin(), m_current_frame.y.end(), 0);
-	std::fill(m_current_frame.cb.begin(), m_current_frame.cb.end(), 128);
-	std::fill(m_current_frame.cr.begin(), m_current_frame.cr.end(), 128);
+	// Macroblocks not reconstructed by the task retain their previous contents in RFP.
+	read_frame(m_current_frame, buffers.reconstructed.data, buffers.reconstructed.bytes);
 
 	bool have_slice = false;
 	while ((peek(32) >= 0x00000101) && (peek(32) <= 0x000001af))
@@ -678,29 +672,8 @@ bool mpeg_video::picture(u32 *output, int output_pitch, int output_rows)
 	if (!have_slice)
 		throw invalid_stream();
 
-	if ((m_picture_coding_type == 1) || (m_picture_coding_type == 2))
-	{
-		bool frame_ready = false;
-		if (m_have_future_reference)
-		{
-			write_frame(m_future_reference, output, output_pitch, output_rows);
-			std::swap(m_past_reference, m_future_reference);
-			m_have_past_reference = true;
-			frame_ready = true;
-		}
-		std::swap(m_future_reference, m_current_frame);
-		m_have_future_reference = true;
-		return frame_ready;
-	}
-
-	write_frame(m_current_frame, output, output_pitch, output_rows);
+	write_frame(m_current_frame, buffers.reconstructed.data, buffers.reconstructed.bytes);
 	return true;
-}
-
-void mpeg_video::reset_reference_frames()
-{
-	m_have_past_reference = false;
-	m_have_future_reference = false;
 }
 
 void mpeg_video::copy_state(const mpeg_video &source)
@@ -730,17 +703,6 @@ void mpeg_video::copy_state(const mpeg_video &source)
 	m_backward_vertical_previous = source.m_backward_vertical_previous;
 	m_previous_b_forward = source.m_previous_b_forward;
 	m_previous_b_backward = source.m_previous_b_backward;
-	std::copy(source.m_current_frame.y.begin(), source.m_current_frame.y.end(), m_current_frame.y.begin());
-	std::copy(source.m_current_frame.cb.begin(), source.m_current_frame.cb.end(), m_current_frame.cb.begin());
-	std::copy(source.m_current_frame.cr.begin(), source.m_current_frame.cr.end(), m_current_frame.cr.begin());
-	std::copy(source.m_past_reference.y.begin(), source.m_past_reference.y.end(), m_past_reference.y.begin());
-	std::copy(source.m_past_reference.cb.begin(), source.m_past_reference.cb.end(), m_past_reference.cb.begin());
-	std::copy(source.m_past_reference.cr.begin(), source.m_past_reference.cr.end(), m_past_reference.cr.begin());
-	std::copy(source.m_future_reference.y.begin(), source.m_future_reference.y.end(), m_future_reference.y.begin());
-	std::copy(source.m_future_reference.cb.begin(), source.m_future_reference.cb.end(), m_future_reference.cb.begin());
-	std::copy(source.m_future_reference.cr.begin(), source.m_future_reference.cr.end(), m_future_reference.cr.begin());
-	m_have_past_reference = source.m_have_past_reference;
-	m_have_future_reference = source.m_have_future_reference;
 }
 
 void mpeg_video::reset_dc_predictors()
@@ -951,37 +913,27 @@ void mpeg_video::predict_macroblock(
 
 	if (forward)
 	{
-		const frame *reference = nullptr;
-		if (m_picture_coding_type == 2)
-		{
-			if (m_have_future_reference)
-				reference = &m_future_reference;
-		}
-		else if (m_have_past_reference)
-		{
-			reference = &m_past_reference;
-		}
-		if (!reference)
+		if (!m_have_forward_reference)
 			throw invalid_stream();
 
-		predict_plane(m_current_frame.y.data(), m_luma_pitch, reference->y.data(), m_luma_pitch,
+		predict_plane(m_current_frame.y.data(), m_luma_pitch, m_forward_reference.y.data(), m_luma_pitch,
 				macroblock_x, macroblock_y, 16, 16, forward_vector, false, false);
-		predict_plane(m_current_frame.cb.data(), m_chroma_pitch, reference->cb.data(), m_chroma_pitch,
+		predict_plane(m_current_frame.cb.data(), m_chroma_pitch, m_forward_reference.cb.data(), m_chroma_pitch,
 				macroblock_x / 2, macroblock_y / 2, 8, 8, forward_vector, true, false);
-		predict_plane(m_current_frame.cr.data(), m_chroma_pitch, reference->cr.data(), m_chroma_pitch,
+		predict_plane(m_current_frame.cr.data(), m_chroma_pitch, m_forward_reference.cr.data(), m_chroma_pitch,
 				macroblock_x / 2, macroblock_y / 2, 8, 8, forward_vector, true, false);
 		have_prediction = true;
 	}
 
 	if (backward)
 	{
-		if (!m_have_future_reference)
+		if (!m_have_backward_reference)
 			throw invalid_stream();
-		predict_plane(m_current_frame.y.data(), m_luma_pitch, m_future_reference.y.data(), m_luma_pitch,
+		predict_plane(m_current_frame.y.data(), m_luma_pitch, m_backward_reference.y.data(), m_luma_pitch,
 				macroblock_x, macroblock_y, 16, 16, backward_vector, false, have_prediction);
-		predict_plane(m_current_frame.cb.data(), m_chroma_pitch, m_future_reference.cb.data(), m_chroma_pitch,
+		predict_plane(m_current_frame.cb.data(), m_chroma_pitch, m_backward_reference.cb.data(), m_chroma_pitch,
 				macroblock_x / 2, macroblock_y / 2, 8, 8, backward_vector, true, have_prediction);
-		predict_plane(m_current_frame.cr.data(), m_chroma_pitch, m_future_reference.cr.data(), m_chroma_pitch,
+		predict_plane(m_current_frame.cr.data(), m_chroma_pitch, m_backward_reference.cr.data(), m_chroma_pitch,
 				macroblock_x / 2, macroblock_y / 2, 8, 8, backward_vector, true, have_prediction);
 	}
 }
@@ -1156,21 +1108,28 @@ void mpeg_video::inverse_dct(const int *coefficients, int *values) const
 	}
 }
 
-void mpeg_video::write_frame(const frame &source, u32 *output, int output_pitch, int output_rows) const
+void mpeg_video::read_frame(frame &destination, const u8 *source, unsigned source_bytes) const
 {
-	if (!output || (output_pitch < m_horizontal_size) || (output_rows < m_vertical_size))
+	const unsigned luma_bytes = m_luma_pitch * m_mb_height * 16;
+	const unsigned chroma_bytes = m_chroma_pitch * m_mb_height * 8;
+	if (!source || (source_bytes < (luma_bytes + 2 * chroma_bytes)))
 		throw invalid_stream();
 
-	for (int y = 0; y != m_vertical_size; y++)
-	{
-		for (int x = 0; x != m_horizontal_size; x++)
-		{
-			const u8 luminance = source.y[y * m_luma_pitch + x];
-			const u8 cb = source.cb[(y / 2) * m_chroma_pitch + x / 2];
-			const u8 cr = source.cr[(y / 2) * m_chroma_pitch + x / 2];
-			output[y * output_pitch + x] = (u32(cr) << 16) | (u32(cb) << 8) | luminance;
-		}
-	}
+	std::copy_n(source, luma_bytes, destination.y.begin());
+	std::copy_n(source + luma_bytes, chroma_bytes, destination.cb.begin());
+	std::copy_n(source + luma_bytes + chroma_bytes, chroma_bytes, destination.cr.begin());
+}
+
+void mpeg_video::write_frame(const frame &source, u8 *output, unsigned output_bytes) const
+{
+	const unsigned luma_bytes = m_luma_pitch * m_mb_height * 16;
+	const unsigned chroma_bytes = m_chroma_pitch * m_mb_height * 8;
+	if (!output || (output_bytes < (luma_bytes + 2 * chroma_bytes)))
+		throw invalid_stream();
+
+	std::copy_n(source.y.begin(), luma_bytes, output);
+	std::copy_n(source.cb.begin(), chroma_bytes, output + luma_bytes);
+	std::copy_n(source.cr.begin(), chroma_bytes, output + luma_bytes + chroma_bytes);
 }
 
 int mpeg_video::macroblock_address_increment()

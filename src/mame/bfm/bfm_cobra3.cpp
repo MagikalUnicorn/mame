@@ -735,7 +735,8 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	m_scc66470->set_screen("screen");
 	m_scc66470->irq().set(FUNC(bfm_cobra3_state::scc66470_irq));
 
-	STI3400(config, m_sti3400, 0); // decoder core and external-memory cycle timing are not modelled
+	STI3400(config, m_sti3400, 0); // decoder clock and external-memory cycle timing are not modelled
+	m_sti3400->set_dram_size(1024 * 1024); // Cobra's buffer pointers cover a 1 MiB address space
 	m_sti3400->irq().set_inputline(m_maincpu, 6);
 
 	auto &scsi(NSCSI_BUS(config, m_scsibus));

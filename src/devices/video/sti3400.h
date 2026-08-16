@@ -12,6 +12,8 @@ public:
 	sti3400_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock = 0);
 	virtual ~sti3400_device();
 
+	void set_dram_size(u32 bytes) { m_dram_size = bytes; }
+
 	auto irq() { return m_irq_cb.bind(); }
 
 	u16 read(offs_t offset, u16 mem_mask = ~0);
@@ -41,6 +43,9 @@ private:
 	static constexpr unsigned REG_INS = 0x14; // next decoding instruction
 	static constexpr unsigned REG_BBB = 0x16; // bit-buffer bottom threshold
 	static constexpr unsigned REG_DFP = 0x18; // displayed picture pointer
+	static constexpr unsigned REG_RFP = 0x1a; // reconstructed picture pointer
+	static constexpr unsigned REG_FFP = 0x1c; // forward prediction picture pointer
+	static constexpr unsigned REG_BFP = 0x1e; // backward prediction picture pointer
 	static constexpr unsigned REG_BBL = 0x22; // current bit-buffer level
 	static constexpr unsigned REG_BBT = 0x32; // bit-buffer top threshold
 
@@ -55,12 +60,14 @@ private:
 	static constexpr u16 CTL_EDC = 0x0001; // enable decoding
 	static constexpr u16 CTL_SRS = 0x0002; // soft reset
 	static constexpr u16 CTL_DVS = 0x0080; // disable VSYNC-triggered task start
+	static constexpr u16 INS_RPT = 0x0002; // repeat picture for a second VSYNC period
 	static constexpr u16 INS_WAIT = 0x0004; // inhibit DSYNC, decoding and header search
 
 	// Bit-buffer levels and thresholds are 14-bit counts of 256-byte units.
 	static constexpr u16 BIT_BUFFER_LEVEL_MASK = 0x3fff;
 	static constexpr unsigned BIT_BUFFER_LEVEL_UNIT_BYTES = 0x100;
 	static constexpr unsigned BIT_BUFFER_LEVEL_BIAS_BYTES = 0x40;
+	static constexpr u16 PICTURE_POINTER_MASK = 0x3fff;
 
 	// The hardware header FIFO is 256 bits wide.
 	static constexpr unsigned HEADER_FIFO_BYTES = 0x20;
@@ -94,6 +101,7 @@ private:
 
 	devcb_write_line m_irq_cb;
 	std::unique_ptr<decoder_state> m_decoder;
+	u32 m_dram_size;
 
 	u16 m_registers[0x40];
 	u8 m_fifo[COMPRESSED_DATA_BUFFER_BYTES];
