@@ -392,8 +392,6 @@ void mpeg_video::clear()
 	m_backward_vertical_previous = 0;
 	m_previous_b_forward = false;
 	m_previous_b_backward = false;
-	m_have_forward_reference = false;
-	m_have_backward_reference = false;
 }
 
 void mpeg_video::register_save_state(device_t &device, int index)
@@ -407,85 +405,64 @@ void mpeg_video::register_save_state(device_t &device, int index)
 	device.save_item(m_frame_rate, "mpeg_video_frame_rate", index);
 	device.save_item(m_intra_quantizer_matrix, "mpeg_video_intra_quantizer_matrix", index);
 	device.save_item(m_non_intra_quantizer_matrix, "mpeg_video_non_intra_quantizer_matrix", index);
-	device.save_item(m_picture_coding_type, "mpeg_video_picture_coding_type", index);
-	device.save_item(m_full_pel_forward_vector, "mpeg_video_full_pel_forward_vector", index);
-	device.save_item(m_full_pel_backward_vector, "mpeg_video_full_pel_backward_vector", index);
-	device.save_item(m_forward_f, "mpeg_video_forward_f", index);
-	device.save_item(m_backward_f, "mpeg_video_backward_f", index);
-	device.save_item(m_quantizer_scale, "mpeg_video_quantizer_scale", index);
-	device.save_item(m_macroblock_address, "mpeg_video_macroblock_address", index);
-	device.save_item(m_dc_predictor, "mpeg_video_dc_predictor", index);
-	device.save_item(m_forward_horizontal_previous, "mpeg_video_forward_horizontal_previous", index);
-	device.save_item(m_forward_vertical_previous, "mpeg_video_forward_vertical_previous", index);
-	device.save_item(m_backward_horizontal_previous, "mpeg_video_backward_horizontal_previous", index);
-	device.save_item(m_backward_vertical_previous, "mpeg_video_backward_vertical_previous", index);
-	device.save_item(m_previous_b_forward, "mpeg_video_previous_b_forward", index);
-	device.save_item(m_previous_b_backward, "mpeg_video_previous_b_backward", index);
 }
 
 mpeg_video::decode_result mpeg_video::decode_buffer(int &pos, int limit, const picture_buffers &buffers,
-		int &width, int &height, double &frame_rate, bool &frame_valid)
+		int &width, int &height, double &frame_rate)
 {
 	if ((limit - pos) < 32)
 		return decode_result::NEED_DATA;
 
-	frame_valid = false;
 	int scan_position = pos;
 	for (;;)
 	{
-		mpeg_video candidate(*this);
-		candidate.m_current_pos = scan_position;
-		candidate.m_current_limit = limit;
+		m_current_pos = scan_position;
+		m_current_limit = limit;
 		int syntax_position = scan_position;
 
 		try
 		{
-			candidate.next_start_code();
-			syntax_position = candidate.m_current_pos;
-			const u32 code = candidate.peek(32);
+			next_start_code();
+			syntax_position = m_current_pos;
+			const u32 code = peek(32);
 
 			switch (code)
 			{
 			case SEQUENCE_HEADER_CODE:
-				candidate.sequence_header();
+				sequence_header();
 				break;
 
 			case GROUP_START_CODE:
-				candidate.group_of_pictures();
+				group_of_pictures();
 				break;
 
 			case PICTURE_START_CODE:
-				frame_valid = candidate.picture(buffers);
+				picture(buffers);
 				// A sequence-end code terminates the preceding coded sequence rather than
 				// describing another decoding task.
-				if (candidate.peek(32) == SEQUENCE_END_CODE)
-					candidate.gb(32);
-				scan_position = candidate.m_current_pos;
-				copy_state(candidate);
-				pos = scan_position;
+				if (peek(32) == SEQUENCE_END_CODE)
+					gb(32);
+				pos = m_current_pos;
 				width = m_horizontal_size;
 				height = m_vertical_size;
 				frame_rate = m_frame_rate;
-				return decode_result::DECODED;
+				return decode_result::PICTURE;
 
 			case SEQUENCE_END_CODE:
-				candidate.gb(32);
-				scan_position = candidate.m_current_pos;
-				copy_state(candidate);
-				pos = scan_position;
+				gb(32);
+				pos = m_current_pos;
 				width = m_horizontal_size;
 				height = m_vertical_size;
 				frame_rate = m_frame_rate;
-				return decode_result::DECODED;
+				return decode_result::SEQUENCE_END;
 
 			default:
 				// Extension, user and system data are delimited by the next start code.
-				candidate.gb(32);
+				gb(32);
 				break;
 			}
 
-			scan_position = candidate.m_current_pos;
-			copy_state(candidate);
+			scan_position = m_current_pos;
 		}
 		catch (limit_hit const &)
 		{
@@ -495,7 +472,7 @@ mpeg_video::decode_result mpeg_video::decode_buffer(int &pos, int limit, const p
 		catch (invalid_stream const &)
 		{
 			// Skip the failed syntax element and resume at the next start code.
-			int recovery_position = std::max(syntax_position + 8, (candidate.m_current_pos + 7) & ~7);
+			int recovery_position = std::max(syntax_position + 8, (m_current_pos + 7) & ~7);
 			while ((recovery_position + 24) <= limit)
 			{
 				const unsigned byte_position = recovery_position / 8;
@@ -522,10 +499,12 @@ void mpeg_video::sequence_header()
 	gb(10); // VBV buffer size
 	gb(1); // constrained parameters flag
 
+	u8 intra_quantizer_matrix[64];
+	u8 non_intra_quantizer_matrix[64];
 	std::copy(
 			std::begin(s_default_intra_quantizer_matrix),
 			std::end(s_default_intra_quantizer_matrix),
-			m_intra_quantizer_matrix);
+			intra_quantizer_matrix);
 	if (gb(1))
 	{
 		for (unsigned zigzag = 0; zigzag != 64; zigzag++)
@@ -534,16 +513,16 @@ void mpeg_video::sequence_header()
 			{
 				if (s_scan[natural] == zigzag)
 				{
-					m_intra_quantizer_matrix[natural] = gb(8);
+					intra_quantizer_matrix[natural] = gb(8);
 					break;
 				}
 			}
 		}
 		// ISO/IEC 11172-2 Technical Corrigendum 2 requires this value to be eight.
-		m_intra_quantizer_matrix[0] = 8;
+		intra_quantizer_matrix[0] = 8;
 	}
 
-	std::fill(std::begin(m_non_intra_quantizer_matrix), std::end(m_non_intra_quantizer_matrix), 16);
+	std::fill(std::begin(non_intra_quantizer_matrix), std::end(non_intra_quantizer_matrix), 16);
 	if (gb(1))
 	{
 		for (unsigned zigzag = 0; zigzag != 64; zigzag++)
@@ -552,7 +531,7 @@ void mpeg_video::sequence_header()
 			{
 				if (s_scan[natural] == zigzag)
 				{
-					m_non_intra_quantizer_matrix[natural] = gb(8);
+					non_intra_quantizer_matrix[natural] = gb(8);
 					break;
 				}
 			}
@@ -564,6 +543,13 @@ void mpeg_video::sequence_header()
 		!s_picture_rates[picture_rate])
 		throw invalid_stream();
 
+	next_start_code();
+	while ((peek(32) == EXTENSION_START_CODE) || (peek(32) == USER_DATA_START_CODE))
+	{
+		gb(32);
+		next_start_code();
+	}
+
 	m_horizontal_size = horizontal_size;
 	m_vertical_size = vertical_size;
 	m_frame_rate = s_picture_rates[picture_rate];
@@ -571,13 +557,8 @@ void mpeg_video::sequence_header()
 	m_mb_height = (m_vertical_size + 15) / 16;
 	m_luma_pitch = m_mb_width * 16;
 	m_chroma_pitch = m_mb_width * 8;
-
-	next_start_code();
-	while ((peek(32) == EXTENSION_START_CODE) || (peek(32) == USER_DATA_START_CODE))
-	{
-		gb(32);
-		next_start_code();
-	}
+	std::copy(std::begin(intra_quantizer_matrix), std::end(intra_quantizer_matrix), m_intra_quantizer_matrix);
+	std::copy(std::begin(non_intra_quantizer_matrix), std::end(non_intra_quantizer_matrix), m_non_intra_quantizer_matrix);
 }
 
 void mpeg_video::group_of_pictures()
@@ -603,7 +584,7 @@ void mpeg_video::group_of_pictures()
 	}
 }
 
-bool mpeg_video::picture(const picture_buffers &buffers)
+void mpeg_video::picture(const picture_buffers &buffers)
 {
 	if (!m_horizontal_size || !m_vertical_size)
 		throw invalid_stream();
@@ -636,18 +617,10 @@ bool mpeg_video::picture(const picture_buffers &buffers)
 	if ((m_picture_coding_type < 1) || (m_picture_coding_type > 4))
 		throw invalid_stream();
 
-	m_have_forward_reference = false;
-	m_have_backward_reference = false;
 	if ((m_picture_coding_type == 2) || (m_picture_coding_type == 3))
-	{
 		read_frame(m_forward_reference, buffers.forward.data, buffers.forward.bytes);
-		m_have_forward_reference = true;
-	}
 	if (m_picture_coding_type == 3)
-	{
 		read_frame(m_backward_reference, buffers.backward.data, buffers.backward.bytes);
-		m_have_backward_reference = true;
-	}
 
 	while (gb(1))
 		gb(8);
@@ -673,36 +646,6 @@ bool mpeg_video::picture(const picture_buffers &buffers)
 		throw invalid_stream();
 
 	write_frame(m_current_frame, buffers.reconstructed.data, buffers.reconstructed.bytes);
-	return true;
-}
-
-void mpeg_video::copy_state(const mpeg_video &source)
-{
-	m_current_pos = source.m_current_pos;
-	m_current_limit = source.m_current_limit;
-	m_horizontal_size = source.m_horizontal_size;
-	m_vertical_size = source.m_vertical_size;
-	m_mb_width = source.m_mb_width;
-	m_mb_height = source.m_mb_height;
-	m_luma_pitch = source.m_luma_pitch;
-	m_chroma_pitch = source.m_chroma_pitch;
-	m_frame_rate = source.m_frame_rate;
-	std::copy(std::begin(source.m_intra_quantizer_matrix), std::end(source.m_intra_quantizer_matrix), m_intra_quantizer_matrix);
-	std::copy(std::begin(source.m_non_intra_quantizer_matrix), std::end(source.m_non_intra_quantizer_matrix), m_non_intra_quantizer_matrix);
-	m_picture_coding_type = source.m_picture_coding_type;
-	m_full_pel_forward_vector = source.m_full_pel_forward_vector;
-	m_full_pel_backward_vector = source.m_full_pel_backward_vector;
-	m_forward_f = source.m_forward_f;
-	m_backward_f = source.m_backward_f;
-	m_quantizer_scale = source.m_quantizer_scale;
-	m_macroblock_address = source.m_macroblock_address;
-	std::copy(std::begin(source.m_dc_predictor), std::end(source.m_dc_predictor), m_dc_predictor);
-	m_forward_horizontal_previous = source.m_forward_horizontal_previous;
-	m_forward_vertical_previous = source.m_forward_vertical_previous;
-	m_backward_horizontal_previous = source.m_backward_horizontal_previous;
-	m_backward_vertical_previous = source.m_backward_vertical_previous;
-	m_previous_b_forward = source.m_previous_b_forward;
-	m_previous_b_backward = source.m_previous_b_backward;
 }
 
 void mpeg_video::reset_dc_predictors()
@@ -913,9 +856,6 @@ void mpeg_video::predict_macroblock(
 
 	if (forward)
 	{
-		if (!m_have_forward_reference)
-			throw invalid_stream();
-
 		predict_plane(m_current_frame.y.data(), m_luma_pitch, m_forward_reference.y.data(), m_luma_pitch,
 				macroblock_x, macroblock_y, 16, 16, forward_vector, false, false);
 		predict_plane(m_current_frame.cb.data(), m_chroma_pitch, m_forward_reference.cb.data(), m_chroma_pitch,
@@ -927,8 +867,6 @@ void mpeg_video::predict_macroblock(
 
 	if (backward)
 	{
-		if (!m_have_backward_reference)
-			throw invalid_stream();
 		predict_plane(m_current_frame.y.data(), m_luma_pitch, m_backward_reference.y.data(), m_luma_pitch,
 				macroblock_x, macroblock_y, 16, 16, backward_vector, false, have_prediction);
 		predict_plane(m_current_frame.cb.data(), m_chroma_pitch, m_backward_reference.cb.data(), m_chroma_pitch,
@@ -939,12 +877,12 @@ void mpeg_video::predict_macroblock(
 }
 
 void mpeg_video::predict_plane(u8 *destination, int destination_pitch, const u8 *reference, int reference_pitch,
-		int x, int y, int width, int height, motion_vector vector, bool chroma, bool average)
+		int x, int y, int width, int height, motion_vector vector, bool chroma, bool average) const
 {
 	auto split_half_pel = [] (int value, int &whole, int &half)
 	{
 		whole = value / 2;
-		if ((value < 0) && (value & 1))
+		if ((value < 0) && (value % 2))
 			whole--;
 		half = value - 2 * whole;
 	};
@@ -955,21 +893,30 @@ void mpeg_video::predict_plane(u8 *destination, int destination_pitch, const u8 
 	int vertical_whole, vertical_half;
 	split_half_pel(horizontal_vector, horizontal_whole, horizontal_half);
 	split_half_pel(vertical_vector, vertical_whole, vertical_half);
+	const int source_x = x + horizontal_whole;
+	const int source_y = y + vertical_whole;
+	const int reference_height = m_mb_height * (chroma ? 8 : 16);
+	if ((source_x < 0) || (source_y < 0) ||
+		((source_x + width + horizontal_half) > reference_pitch) ||
+		((source_y + height + vertical_half) > reference_height))
+	{
+		throw invalid_stream();
+	}
 
 	for (int row = 0; row != height; row++)
 	{
 		for (int column = 0; column != width; column++)
 		{
-			const int source_x = x + column + horizontal_whole;
-			const int source_y = y + row + vertical_whole;
-			int prediction = reference[source_y * reference_pitch + source_x];
+			const int reference_x = source_x + column;
+			const int reference_y = source_y + row;
+			int prediction = reference[reference_y * reference_pitch + reference_x];
 			if (horizontal_half)
-				prediction += reference[source_y * reference_pitch + source_x + 1];
+				prediction += reference[reference_y * reference_pitch + reference_x + 1];
 			if (vertical_half)
 			{
-				prediction += reference[(source_y + 1) * reference_pitch + source_x];
+				prediction += reference[(reference_y + 1) * reference_pitch + reference_x];
 				if (horizontal_half)
-					prediction += reference[(source_y + 1) * reference_pitch + source_x + 1];
+					prediction += reference[(reference_y + 1) * reference_pitch + reference_x + 1];
 			}
 
 			const int divisor = (horizontal_half + 1) * (vertical_half + 1);

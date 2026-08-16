@@ -21,7 +21,8 @@ class mpeg_video
 public:
 	enum class decode_result
 	{
-		DECODED,
+		PICTURE,
+		SEQUENCE_END,
 		NEED_DATA,
 		INVALID_DATA
 	};
@@ -50,16 +51,16 @@ public:
 	// width        = width of a completed output picture
 	// height       = height of a completed output picture
 	// frame_rate   = sequence picture rate
-	// frame_valid  = true if a complete reconstructed picture was written
 	//
-	// returns DECODED if a complete coded picture or sequence-end marker was
-	// consumed, NEED_DATA if more input is required, or INVALID_DATA if invalid
-	// syntax was skipped.  pos is updated to the first unconsumed bit.
+	// returns PICTURE if a complete coded picture was reconstructed,
+	// SEQUENCE_END if a standalone sequence-end marker was consumed, NEED_DATA
+	// if more input is required, or INVALID_DATA if invalid syntax was skipped.
+	// pos is updated to the first unconsumed bit.
 
 	decode_result decode_buffer(int &pos, int limit, const picture_buffers &buffers,
-						int &width, int &height, double &frame_rate, bool &frame_valid);
+						int &width, int &height, double &frame_rate);
 
-	// Clear sequence and reference-picture state.
+	// Clear persistent decoding state.
 	void clear();
 
 	// Register persistent decoding state with an owning device.
@@ -138,25 +139,22 @@ private:
 	frame m_current_frame;
 	frame m_forward_reference;
 	frame m_backward_reference;
-	bool m_have_forward_reference;
-	bool m_have_backward_reference;
 	double m_cosine[8][8];
 
 	void sequence_header();
 	void group_of_pictures();
-	bool picture(const picture_buffers &buffers);
+	void picture(const picture_buffers &buffers);
 	void slice(unsigned vertical_position);
 	void macroblock(bool first_in_slice);
 	void skipped_macroblock(int address);
 	void block(unsigned index, bool intra);
 
-	void copy_state(const mpeg_video &source);
 	void reset_dc_predictors();
 	void decode_motion_vector(bool forward, motion_vector &vector);
-	int decode_motion_component(int code, int residual, int f, int &previous, bool full_pel);
+	static int decode_motion_component(int code, int residual, int f, int &previous, bool full_pel);
 	void predict_macroblock(bool forward, bool backward, motion_vector forward_vector, motion_vector backward_vector);
 	void predict_plane(u8 *destination, int destination_pitch, const u8 *reference, int reference_pitch,
-					int x, int y, int width, int height, motion_vector vector, bool chroma, bool average);
+					int x, int y, int width, int height, motion_vector vector, bool chroma, bool average) const;
 	void put_block(unsigned index, const int *values, bool intra);
 	void inverse_dct(const int *coefficients, int *values) const;
 	void read_frame(frame &destination, const u8 *source, unsigned source_bytes) const;

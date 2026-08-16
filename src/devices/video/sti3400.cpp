@@ -95,9 +95,7 @@ void sti3400_device::device_start()
 	save_item(NAME(m_event_tail));
 	save_item(NAME(m_event_count));
 	save_item(NAME(m_interrupt_status));
-	save_item(NAME(m_status));
 	save_item(NAME(m_event_active));
-	save_item(NAME(m_irq_state));
 	save_item(NAME(m_decoder->input));
 	save_item(NAME(m_decoder->dram));
 	save_item(NAME(m_decoder->picture_valid));
@@ -119,52 +117,22 @@ void sti3400_device::device_start()
 void sti3400_device::device_reset()
 {
 	std::fill(std::begin(m_registers), std::end(m_registers), 0);
-	std::fill(std::begin(m_fifo), std::end(m_fifo), 0);
-	std::fill(std::begin(m_event_position), std::end(m_event_position), 0);
-	std::fill(std::begin(m_event_code), std::end(m_event_code), 0);
-
-	m_fifo_write = 0;
-	m_fifo_read = 0;
-	m_decode_position = 0;
-	m_start_code_shift = MPEG_START_CODE_SHIFT_RESET;
-	m_event_head = 0;
-	m_event_tail = 0;
-	m_event_count = 0;
 	m_interrupt_status = 0;
 	m_status = STA_RESET;
-	m_event_active = false;
 	m_irq_state = false;
-	m_decoder->input.fill(0);
-	std::fill(m_decoder->picture_valid.begin(), m_decoder->picture_valid.end(), 0);
-	m_decoder->input_bytes = 0;
-	m_decoder->input_bit_position = 0;
-	m_decoder->display_pointer = 0;
-	m_decoder->reconstructed_pointer = 0;
-	m_decoder->forward_pointer = 0;
-	m_decoder->backward_pointer = 0;
-	m_decoder->width = 0;
-	m_decoder->height = 0;
-	m_decoder->decoded_width = 0;
-	m_decoder->decoded_height = 0;
-	m_decoder->frame_rate = FALLBACK_FRAME_RATE;
-	m_decoder->task_active = false;
-	m_decoder->repeat_pending = false;
-	m_decoder->decoder->clear();
+	reset_decoder();
 	m_irq_cb(CLEAR_LINE);
-	m_decode_timer->adjust(attotime::never);
 }
 
 void sti3400_device::device_post_load()
 {
+	m_status = decoder_status();
+	m_irq_state = bool(m_interrupt_status & m_registers[REG_ITM]);
 	m_irq_cb(m_irq_state ? ASSERT_LINE : CLEAR_LINE);
 }
 
-void sti3400_device::decoder_soft_reset()
+void sti3400_device::reset_decoder()
 {
-	std::fill(std::begin(m_fifo), std::end(m_fifo), 0);
-	std::fill(std::begin(m_event_position), std::end(m_event_position), 0);
-	std::fill(std::begin(m_event_code), std::end(m_event_code), 0);
-
 	m_fifo_write = 0;
 	m_fifo_read = 0;
 	m_decode_position = 0;
@@ -173,7 +141,6 @@ void sti3400_device::decoder_soft_reset()
 	m_event_tail = 0;
 	m_event_count = 0;
 	m_event_active = false;
-	m_decoder->input.fill(0);
 	std::fill(m_decoder->picture_valid.begin(), m_decoder->picture_valid.end(), 0);
 	m_decoder->input_bytes = 0;
 	m_decoder->input_bit_position = 0;
@@ -190,16 +157,16 @@ void sti3400_device::decoder_soft_reset()
 	m_decoder->repeat_pending = false;
 	m_decoder->decoder->clear();
 	m_decode_timer->adjust(attotime::never);
+}
+
+void sti3400_device::decoder_soft_reset()
+{
+	reset_decoder();
 	update_status();
 }
 
-sti3400_device::frame_decode_result sti3400_device::decode_frame(bool &frame_valid)
+bool sti3400_device::execute_task()
 {
-	int position = m_decoder->input_bit_position;
-	int width = m_decoder->decoded_width;
-	int height = m_decoder->decoded_height;
-	double frame_rate = m_decoder->frame_rate;
-	frame_valid = false;
 	auto const picture_buffer = [this] (u16 pointer)
 	{
 		const unsigned base = (unsigned(pointer) * BIT_BUFFER_LEVEL_UNIT_BYTES) & (m_dram_size - 1);
@@ -211,52 +178,50 @@ sti3400_device::frame_decode_result sti3400_device::decode_frame(bool &frame_val
 		picture_buffer(m_decoder->forward_pointer),
 		picture_buffer(m_decoder->backward_pointer)
 	};
-	const mpeg_video::decode_result result = m_decoder->decoder->decode_buffer(
-			position,
-			m_decoder->input_bytes * 8,
-			buffers,
-			width,
-			height,
-			frame_rate,
-			frame_valid);
 
-	if (result == mpeg_video::decode_result::DECODED)
+	for (;;)
 	{
-		m_decoder->decoded_width = width;
-		m_decoder->decoded_height = height;
-		m_decoder->frame_rate = frame_rate;
-		if (frame_valid)
+		int position = m_decoder->input_bit_position;
+		int width = m_decoder->decoded_width;
+		int height = m_decoder->decoded_height;
+		double frame_rate = m_decoder->frame_rate;
+		const u64 stream_position = m_decode_position + (position / 8);
+		const mpeg_video::decode_result result = m_decoder->decoder->decode_buffer(
+				position,
+				m_decoder->input_bytes * 8,
+				buffers,
+				width,
+				height,
+				frame_rate);
+
+		if (result == mpeg_video::decode_result::PICTURE)
 		{
+			m_decoder->decoded_width = width;
+			m_decoder->decoded_height = height;
+			m_decoder->frame_rate = frame_rate;
 			const unsigned picture = m_decoder->reconstructed_pointer & (m_decoder->picture_valid.size() - 1);
 			m_decoder->picture_valid[picture] = 1;
 		}
-	}
-	else if (result == mpeg_video::decode_result::INVALID_DATA)
-	{
-		LOGMASKED(LOG_INVALID_DATA, "%s: skipped invalid MPEG video data at byte %08x\n",
-			machine().describe_context(), u32(m_decode_position + (position / 8)));
-	}
+		else if (result == mpeg_video::decode_result::INVALID_DATA)
+		{
+			LOGMASKED(LOG_INVALID_DATA, "%s: skipped invalid MPEG video data at byte %08x\n",
+				machine().describe_context(), u32(stream_position));
+		}
 
-	const unsigned bytes_consumed = position / 8;
-	if (bytes_consumed)
-	{
-		std::move(
-			m_decoder->input.begin() + bytes_consumed,
-			m_decoder->input.begin() + m_decoder->input_bytes,
-			m_decoder->input.begin());
-		m_decoder->input_bytes -= bytes_consumed;
-		m_decode_position += bytes_consumed;
-	}
-	m_decoder->input_bit_position = position & 7;
+		const unsigned bytes_consumed = position / 8;
+		if (bytes_consumed)
+		{
+			std::move(
+				m_decoder->input.begin() + bytes_consumed,
+				m_decoder->input.begin() + m_decoder->input_bytes,
+				m_decoder->input.begin());
+			m_decoder->input_bytes -= bytes_consumed;
+			m_decode_position += bytes_consumed;
+		}
+		m_decoder->input_bit_position = position & 7;
 
-	switch (result)
-	{
-	case mpeg_video::decode_result::DECODED:
-		return frame_decode_result::DECODED;
-	case mpeg_video::decode_result::INVALID_DATA:
-		return frame_decode_result::INVALID_DATA;
-	default:
-		return frame_decode_result::NEED_DATA;
+		if (result != mpeg_video::decode_result::INVALID_DATA)
+			return result != mpeg_video::decode_result::NEED_DATA;
 	}
 }
 
@@ -264,17 +229,7 @@ TIMER_CALLBACK_MEMBER(sti3400_device::decode_tick)
 {
 	if (m_decoder->task_active)
 	{
-		frame_decode_result result;
-		do
-		{
-			bool frame_valid = false;
-			result = decode_frame(frame_valid);
-			if (frame_valid)
-				break;
-		}
-		while (result != frame_decode_result::NEED_DATA);
-
-		if (result != frame_decode_result::NEED_DATA)
+		if (execute_task())
 			m_decoder->task_active = false;
 		else
 			m_decode_timer->adjust(attotime::from_hz(m_decoder->frame_rate));

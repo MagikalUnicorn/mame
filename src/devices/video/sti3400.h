@@ -28,7 +28,7 @@ public:
 protected:
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
-	virtual void device_post_load() override;
+	virtual void device_post_load() override ATTR_COLD;
 
 private:
 	// STi3400 host-interface register addresses from the data sheet.
@@ -77,16 +77,10 @@ private:
 	static_assert(std::has_single_bit(COMPRESSED_DATA_BUFFER_BYTES));
 	static_assert(std::has_single_bit(START_CODE_EVENT_COUNT));
 
-	enum class frame_decode_result
-	{
-		DECODED,
-		NEED_DATA,
-		INVALID_DATA
-	};
-
 	void stream_byte_w(u8 data);
+	void reset_decoder();
 	void decoder_soft_reset();
-	frame_decode_result decode_frame(bool &frame_valid);
+	bool execute_task();
 	TIMER_CALLBACK_MEMBER(decode_tick);
 	void queue_start_code(u64 position, u8 code);
 	void activate_event();
