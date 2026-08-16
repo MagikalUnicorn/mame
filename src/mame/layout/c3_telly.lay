@@ -134,7 +134,7 @@ copyright-holders:MagikalUnicorn
 		</text>
 	</element>
 	<element name="lamp_label_13">
-		<text string="ACCEPTOR">
+		<text string="COIN ACCEPTOR">
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
