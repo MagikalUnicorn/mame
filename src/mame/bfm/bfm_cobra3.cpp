@@ -5,6 +5,40 @@
     aka Cobra 3
 
    MPEG video and audio decoding are preliminary.
+
+   Telly Addicts user notes:
+   - Blank NVRAM produces a RAM ERROR on every startup.  Setting the stored
+     volume does not clear this error, but it does not prevent the game from
+     running.  The volume initially starts at its minimum setting.  From
+     attract mode, toggle Refill/Volume Setup (R), adjust it with Up/Down,
+     press Start to exit, then toggle Refill/Volume Setup off.
+   - To use the test routines, open the Back and Front Doors (T), then press
+     Test (F1).  Use Up/Down to choose a test and Start to enter or leave it.
+     METER TEST requires Refill/Volume Setup to be on before entering and off
+     again before leaving.
+   - With the doors open, pressing Test twice within one second supplies two
+     demonstration credits.  This is free play rather than an automatic demo:
+     the player must still answer the questions.  Counters and payouts remain
+     disabled.
+   - CASHFLOW TEST is a read-only audit display.  Cash and meter counters do
+     not advance while the test routines are active.
+   - Inserting £1 or 20p coins with Refill/Volume Setup active replenishes the
+     corresponding tube and records CASH REFILL rather than CASH IN.
+   - The Initial Tube Fill adjusters are sampled when the machine starts.  At
+     the default 100%, the £1 tube holds 40 coins (£40) and the 20p tube holds
+     150 coins (£30), allowing immediate payouts.  Restart after changing an
+     initial fill setting.
+
+   BTANB:
+   - Pressing Test with the Back and Front Doors closed can skip or interrupt
+     the current video and leave its overlay out of position.  This is not a
+     valid operating sequence; the doors must be opened before using Test.
+   - Enabling the Demo Sounds DIL does not make every attract sequence play
+     sound.  It permits demo sounds, which the game uses for only a proportion
+     of attract sequences.
+   - RESET ERROR 1 is the game's anti-tamper response to fewer than five
+     detected resets, not an emulation failure.  Close the Back and Front
+     Doors and allow the alarm delay to expire to clear it.
 */
 
 
