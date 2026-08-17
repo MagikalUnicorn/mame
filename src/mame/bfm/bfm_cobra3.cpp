@@ -208,10 +208,10 @@ void c3_telly_state::cabinet_outputs_w(uint16_t data)
 	if (!BIT(m_strobein[2]->read(), 2))
 		return;
 
-	if (BIT(rising, 0) && m_pound_tube_level)
-		m_pound_tube_level--;
-	if (BIT(rising, 2) && m_twenty_p_tube_level)
+	if (BIT(rising, 0) && m_twenty_p_tube_level) // triac A: 20p payslide
 		m_twenty_p_tube_level--;
+	if (BIT(rising, 2) && m_pound_tube_level) // triac C: £1 payslide
+		m_pound_tube_level--;
 }
 
 void bfm_cobra3_state::volume_control(uint8_t direction, uint8_t clock)
@@ -341,7 +341,7 @@ uint16_t bfm_cobra3_state::mem_r(offs_t offset, uint16_t mem_mask)
 						break;
 
 					default:
-						logerror("%s maincpu read access offset %08x mem_mask %08x cs %d\n", machine().describe_context(), offset*4, mem_mask, cs);
+						logerror("%s maincpu read access offset %08x mem_mask %08x cs %d\n", machine().describe_context(), offset * 2, mem_mask, cs);
 						break;
 				}
 			}
@@ -355,7 +355,7 @@ uint16_t bfm_cobra3_state::mem_r(offs_t offset, uint16_t mem_mask)
 			break;
 
 		default:
-			logerror("%s maincpu read access offset %08x mem_mask %08x cs %d\n", machine().describe_context(), offset*4, mem_mask, cs);
+			logerror("%s maincpu read access offset %08x mem_mask %08x cs %d\n", machine().describe_context(), offset * 2, mem_mask, cs);
 	}
 
 	return 0x0000;
@@ -368,7 +368,7 @@ void bfm_cobra3_state::mem_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	switch (cs)
 	{
 		case 1:// ROM, shouldn't write here?
-			logerror("%sx maincpu write access(1) offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset*4, data, mem_mask, cs);
+			logerror("%s maincpu write access(1) offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset * 2, data, mem_mask, cs);
 			break;
 
 		case 2:// (NV)RAM
@@ -450,7 +450,7 @@ void bfm_cobra3_state::mem_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 
 					default:
 						// The Phrase That Pays uses the 0x900 and 0xa00 blocks for unimplemented coin-handling outputs.
-						logerror("%s maincpu write access(3) offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset*4, data, mem_mask, cs);
+						logerror("%s maincpu write access(3) offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset * 2, data, mem_mask, cs);
 						break;
 				}
 			}
@@ -465,7 +465,7 @@ void bfm_cobra3_state::mem_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 			break;
 
 		default:
-			logerror("%s maincpu write access(0) offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset*4, data, mem_mask, cs);
+			logerror("%s maincpu write access(0) offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset * 2, data, mem_mask, cs);
 			break;
 	}
 }
