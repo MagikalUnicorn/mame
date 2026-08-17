@@ -398,10 +398,6 @@ void bfm_cobra3_state::mem_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 						break;
 
 					case 0x200:
-						if (data > 0x100)
-						{
-							logerror("%s maincpu write access io latch offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset*4, data, mem_mask, cs);
-						}
 						update_meters(data);
 						cabinet_outputs_w(data);
 						volume_control(BIT(data,7), BIT(data,15));
@@ -453,7 +449,7 @@ void bfm_cobra3_state::mem_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 						break;
 
 					default:
-						// coin divert, hoppers, note validator must be somewhere
+						// The Phrase That Pays uses the 0x900 and 0xa00 blocks for unimplemented coin-handling outputs.
 						logerror("%s maincpu write access(3) offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset*4, data, mem_mask, cs);
 						break;
 				}
@@ -646,6 +642,7 @@ uint32_t bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bi
 
 		if (m_sti3400->video_valid())
 		{
+			// Cobra MPEG pictures are 352x288; centre-crop them to the 280-line display area.
 			const unsigned source_y = std::min<unsigned>(
 				cliprect.min_y - 32 + 4,
 				m_sti3400->video_height() - 1);
@@ -671,10 +668,6 @@ uint32_t bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bi
 			else
 				dest += 32;
 			src += 32;
-
-			/* mpeg video has significant overscan, 4 lines either side.
-
-			Just crop it out to fit, presume the chip does this IRL */
 
 			for (int x = 0 ; x < 352 ; x++)
 			{
