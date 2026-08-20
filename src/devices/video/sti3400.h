@@ -17,8 +17,7 @@ public:
 
 	auto irq() { return m_irq_cb.bind(); }
 
-	u16 read(offs_t offset, u16 mem_mask = ~0);
-	void write(offs_t offset, u16 data, u16 mem_mask = ~0);
+	void map(address_map &map) ATTR_COLD;
 	void vblank_w(int state);
 
 	bool video_valid() const;
@@ -91,6 +90,23 @@ private:
 	static constexpr u32 FALLBACK_FRAME_RATE = 25;
 
 	void stream_byte_w(u8 data);
+	u16 register_r(offs_t offset);
+	void register_w(offs_t offset, u16 data, u16 mem_mask = ~0);
+	void compressed_data_w(offs_t offset, u16 data, u16 mem_mask = ~0);
+	u16 header_data_r();
+	u16 header_position_r();
+	u16 status_r();
+	u16 interrupt_status_r(offs_t offset, u16 mem_mask = ~0);
+	u16 display_pointer_r();
+	u16 reconstructed_pointer_r();
+	u16 forward_pointer_r();
+	u16 backward_pointer_r();
+	u16 bit_buffer_level_r();
+	void control_w(offs_t offset, u16 data, u16 mem_mask = ~0);
+	void interrupt_mask_w(offs_t offset, u16 data, u16 mem_mask = ~0);
+	void header_search_w(offs_t offset, u16 data, u16 mem_mask = ~0);
+	void bit_buffer_bottom_w(offs_t offset, u16 data, u16 mem_mask = ~0);
+	void bit_buffer_top_w(offs_t offset, u16 data, u16 mem_mask = ~0);
 	void reset_decoder();
 	void decoder_soft_reset();
 	bool execute_task();

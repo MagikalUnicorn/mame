@@ -421,95 +421,134 @@ u8 sti3400_device::stream_byte(u64 position) const
 	return m_fifo[position & (COMPRESSED_DATA_BUFFER_BYTES - 1)];
 }
 
-u16 sti3400_device::read(offs_t offset, u16 mem_mask)
+u16 sti3400_device::register_r(offs_t offset)
 {
-	switch (offset)
-	{
-	case REG_HDF:
-	{
-		const u16 result = (stream_byte(m_fifo_read) << 8) | stream_byte(m_fifo_read + 1);
-		if (!machine().side_effects_disabled())
-		{
-			m_fifo_read = std::min(m_fifo_read + 2, m_fifo_write);
-			update_status();
-		}
-		return result;
-	}
-
-	case REG_HDP:
-		return 0;
-
-	case REG_STA:
-		return m_status;
-
-	case REG_BBL:
-		return bit_buffer_level();
-
-	case REG_DFP:
-		return m_display_pointer;
-
-	case REG_RFP:
-		return m_reconstructed_pointer;
-
-	case REG_FFP:
-		return m_forward_pointer;
-
-	case REG_BFP:
-		return m_backward_pointer;
-
-	case REG_ITS:
-	{
-		const u16 result = m_interrupt_status;
-		if (!machine().side_effects_disabled())
-		{
-			if (ACCESSING_BITS_8_15)
-				m_interrupt_status &= 0x00ff;
-			if (ACCESSING_BITS_0_7)
-				m_interrupt_status &= 0xff00;
-			update_irq();
-		}
-		return result;
-	}
-
-	default:
-		return m_registers[offset];
-	}
+	return m_registers[offset];
 }
 
-void sti3400_device::write(offs_t offset, u16 data, u16 mem_mask)
+void sti3400_device::register_w(offs_t offset, u16 data, u16 mem_mask)
 {
-	if (offset == REG_CDF)
+	COMBINE_DATA(&m_registers[offset]);
+}
+
+void sti3400_device::compressed_data_w(offs_t, u16 data, u16 mem_mask)
+{
+	if (ACCESSING_BITS_8_15)
+		stream_byte_w(data >> 8);
+	if (ACCESSING_BITS_0_7)
+		stream_byte_w(data);
+}
+
+u16 sti3400_device::header_data_r()
+{
+	const u16 result = (stream_byte(m_fifo_read) << 8) | stream_byte(m_fifo_read + 1);
+	if (!machine().side_effects_disabled())
+	{
+		m_fifo_read = std::min(m_fifo_read + 2, m_fifo_write);
+		update_status();
+	}
+	return result;
+}
+
+u16 sti3400_device::header_position_r()
+{
+	return 0;
+}
+
+u16 sti3400_device::status_r()
+{
+	return m_status;
+}
+
+u16 sti3400_device::interrupt_status_r(offs_t, u16 mem_mask)
+{
+	const u16 result = m_interrupt_status;
+	if (!machine().side_effects_disabled())
 	{
 		if (ACCESSING_BITS_8_15)
-			stream_byte_w(data >> 8);
+			m_interrupt_status &= 0x00ff;
 		if (ACCESSING_BITS_0_7)
-			stream_byte_w(data);
-		return;
-	}
-
-	const u16 old_data = m_registers[offset];
-	COMBINE_DATA(&m_registers[offset]);
-
-	switch (offset)
-	{
-	case REG_CTL:
-		if ((old_data & CTL_SRS) && !(m_registers[offset] & CTL_SRS))
-			decoder_soft_reset();
-		else
-			update_status();
-		break;
-
-	case REG_ITM:
+			m_interrupt_status &= 0xff00;
 		update_irq();
-		break;
-
-	case REG_HDS:
-		finish_event();
-		break;
-
-	case REG_BBB:
-	case REG_BBT:
-		update_status();
-		break;
 	}
+	return result;
+}
+
+u16 sti3400_device::display_pointer_r()
+{
+	return m_display_pointer;
+}
+
+u16 sti3400_device::reconstructed_pointer_r()
+{
+	return m_reconstructed_pointer;
+}
+
+u16 sti3400_device::forward_pointer_r()
+{
+	return m_forward_pointer;
+}
+
+u16 sti3400_device::backward_pointer_r()
+{
+	return m_backward_pointer;
+}
+
+u16 sti3400_device::bit_buffer_level_r()
+{
+	return bit_buffer_level();
+}
+
+void sti3400_device::control_w(offs_t, u16 data, u16 mem_mask)
+{
+	const u16 old_data = m_registers[REG_CTL];
+	COMBINE_DATA(&m_registers[REG_CTL]);
+	if ((old_data & CTL_SRS) && !(m_registers[REG_CTL] & CTL_SRS))
+		decoder_soft_reset();
+	else
+		update_status();
+}
+
+void sti3400_device::interrupt_mask_w(offs_t, u16 data, u16 mem_mask)
+{
+	COMBINE_DATA(&m_registers[REG_ITM]);
+	update_irq();
+}
+
+void sti3400_device::header_search_w(offs_t, u16 data, u16 mem_mask)
+{
+	COMBINE_DATA(&m_registers[REG_HDS]);
+	finish_event();
+}
+
+void sti3400_device::bit_buffer_bottom_w(offs_t, u16 data, u16 mem_mask)
+{
+	COMBINE_DATA(&m_registers[REG_BBB]);
+	update_status();
+}
+
+void sti3400_device::bit_buffer_top_w(offs_t, u16 data, u16 mem_mask)
+{
+	COMBINE_DATA(&m_registers[REG_BBT]);
+	update_status();
+}
+
+void sti3400_device::map(address_map &map)
+{
+	map(0x00, 0x7f).rw(FUNC(sti3400_device::register_r), FUNC(sti3400_device::register_w));
+	map(0x00, 0x01).w(FUNC(sti3400_device::compressed_data_w));
+	map(0x04, 0x05).r(FUNC(sti3400_device::header_data_r));
+	map(0x08, 0x09).r(FUNC(sti3400_device::header_position_r));
+	map(0x10, 0x11).r(FUNC(sti3400_device::status_r));
+	map(0x14, 0x15).w(FUNC(sti3400_device::control_w));
+	map(0x1c, 0x1d).w(FUNC(sti3400_device::interrupt_mask_w));
+	map(0x20, 0x21).r(FUNC(sti3400_device::interrupt_status_r));
+	map(0x24, 0x25).w(FUNC(sti3400_device::header_search_w));
+	map(0x2c, 0x2d).w(FUNC(sti3400_device::bit_buffer_bottom_w));
+	map(0x30, 0x31).r(FUNC(sti3400_device::display_pointer_r));
+	map(0x34, 0x35).r(FUNC(sti3400_device::reconstructed_pointer_r));
+	map(0x38, 0x39).r(FUNC(sti3400_device::forward_pointer_r));
+	map(0x3c, 0x3d).r(FUNC(sti3400_device::backward_pointer_r));
+	map(0x44, 0x45).r(FUNC(sti3400_device::bit_buffer_level_r));
+	map(0x64, 0x65).w(FUNC(sti3400_device::bit_buffer_top_w));
 }
