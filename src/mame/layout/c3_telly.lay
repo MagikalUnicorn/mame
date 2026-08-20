@@ -283,16 +283,6 @@ copyright-holders:MagikalUnicorn
 			<color state="0" red="0.25" green="0.02" blue="0.02" />
 			<color state="255" red="1.00" green="0.20" blue="0.14" />
 		</text>
-		<text string="10p 20p">
-			<bounds x="0.105" y="0.560" width="0.175" height="0.065" />
-			<color state="0" red="0.22" green="0.02" blue="0.02" />
-			<color state="255" red="0.90" green="0.16" blue="0.12" />
-		</text>
-		<text string="50p &#xa3;1">
-			<bounds x="0.105" y="0.640" width="0.175" height="0.065" />
-			<color state="0" red="0.22" green="0.02" blue="0.02" />
-			<color state="255" red="0.90" green="0.16" blue="0.12" />
-		</text>
 		<disk>
 			<bounds x="0.680" y="0.195" width="0.098" height="0.170" />
 			<color state="0" red="0.27" green="0.02" blue="0.025" />
@@ -344,6 +334,50 @@ copyright-holders:MagikalUnicorn
 			<color state="0" red="0.005" green="0.005" blue="0.005" />
 			<color state="255" red="0.42" green="0.015" blue="0.008" />
 		</rect>
+	</element>
+	<element name="coin_label_10p" defstate="0">
+		<rect>
+			<color alpha="0.0" />
+		</rect>
+		<text string="10p">
+			<bounds x="0.105" y="0.560" width="0.080" height="0.065" />
+			<color state="0" red="0.22" green="0.02" blue="0.02" />
+			<color state="255" red="0.90" green="0.16" blue="0.12" />
+			<color state="256" red="0.00" green="0.00" blue="0.00" />
+		</text>
+	</element>
+	<element name="coin_label_20p" defstate="0">
+		<rect>
+			<color alpha="0.0" />
+		</rect>
+		<text string="20p">
+			<bounds x="0.200" y="0.560" width="0.080" height="0.065" />
+			<color state="0" red="0.22" green="0.02" blue="0.02" />
+			<color state="255" red="0.90" green="0.16" blue="0.12" />
+			<color state="256" red="0.00" green="0.00" blue="0.00" />
+		</text>
+	</element>
+	<element name="coin_label_50p" defstate="0">
+		<rect>
+			<color alpha="0.0" />
+		</rect>
+		<text string="50p">
+			<bounds x="0.105" y="0.640" width="0.080" height="0.065" />
+			<color state="0" red="0.22" green="0.02" blue="0.02" />
+			<color state="255" red="0.90" green="0.16" blue="0.12" />
+			<color state="256" red="0.00" green="0.00" blue="0.00" />
+		</text>
+	</element>
+	<element name="coin_label_pound" defstate="0">
+		<rect>
+			<color alpha="0.0" />
+		</rect>
+		<text string="&#xa3;1">
+			<bounds x="0.210" y="0.640" width="0.055" height="0.065" />
+			<color state="0" red="0.22" green="0.02" blue="0.02" />
+			<color state="255" red="0.90" green="0.16" blue="0.12" />
+			<color state="256" red="0.00" green="0.00" blue="0.00" />
+		</text>
 	</element>
 
 	<element name="lamp_label_0">
@@ -426,6 +460,18 @@ copyright-holders:MagikalUnicorn
 			<bounds x="648" y="-168" width="240" height="138" />
 		</element>
 		<element id="coin_acceptor_lamps" name="lamp13" ref="coin_acceptor_lamps">
+			<bounds x="648" y="-168" width="240" height="138" />
+		</element>
+		<element id="coin_d_label" ref="coin_label_10p">
+			<bounds x="648" y="-168" width="240" height="138" />
+		</element>
+		<element id="coin_c_label" ref="coin_label_20p">
+			<bounds x="648" y="-168" width="240" height="138" />
+		</element>
+		<element id="coin_b_label" ref="coin_label_50p">
+			<bounds x="648" y="-168" width="240" height="138" />
+		</element>
+		<element id="coin_a_label" ref="coin_label_pound">
 			<bounds x="648" y="-168" width="240" height="138" />
 		</element>
 		<screen index="0">
@@ -660,6 +706,7 @@ copyright-holders:MagikalUnicorn
 			{ number = 13, face = "coin_acceptor_lamps" }
 		}
 		local maximum_level = 255
+		local locked_coin_state = 256
 		-- Filament response is nonlinear, but exponential relaxation is a useful compact model.
 		-- With the exact lamp unknown, use the fast end of published miniature-lamp ranges:
 		-- 100 ms to reach 90% brightness and 60 ms to decay to 10% brightness.
@@ -673,10 +720,17 @@ copyright-holders:MagikalUnicorn
 			end
 		end
 
+		local function coin_label_state_callback(label, lamp)
+			return function ()
+				return label.lockout:get() ~= 0 and locked_coin_state or math.floor(lamp.level + 0.5)
+			end
+		end
+
 		file:set_resolve_tags_callback(
 				function ()
 					local view = file.views["Screen and Lamps"]
 					local lamps = { }
+					local coin_acceptor_lamp
 
 					for _, item in ipairs(lamp_items) do
 						local lamp = {
@@ -688,7 +742,20 @@ copyright-holders:MagikalUnicorn
 						if lamp.highlight then
 							lamp.highlight:set_element_state_callback(state_callback(lamp))
 						end
+						if item.number == 13 then
+							coin_acceptor_lamp = lamp
+						end
 						table.insert(lamps, lamp)
+					end
+
+					local coin_labels = {
+						{ item = view.items["coin_a_label"], lockout = file.device:output("coin_lockout0") },
+						{ item = view.items["coin_b_label"], lockout = file.device:output("coin_lockout1") },
+						{ item = view.items["coin_c_label"], lockout = file.device:output("coin_lockout2") },
+						{ item = view.items["coin_d_label"], lockout = file.device:output("coin_lockout3") }
+					}
+					for _, label in ipairs(coin_labels) do
+						label.item:set_element_state_callback(coin_label_state_callback(label, coin_acceptor_lamp))
 					end
 
 					local previous_time = emu.attotime(machine.time)

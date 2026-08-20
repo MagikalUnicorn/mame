@@ -86,6 +86,7 @@ public:
 		m_iostatus(*this, "IOSTATUS"),
 		m_meters(*this, "meters"),
 		m_lamps(*this, "lamp%u", 0U),
+		m_coin_lockouts(*this, "coin_lockout%u", 0U),
 		m_scsibus(*this, "scsi"),
 		m_scsic(*this, "ncr5380"),
 		m_watchdog(*this, "watchdog")
@@ -109,6 +110,7 @@ protected:
 	required_ioport m_iostatus;
 	required_device<meters_device> m_meters;
 	output_finder<24> m_lamps;
+	output_finder<5> m_coin_lockouts;
 	required_device<nscsi_bus_device> m_scsibus;
 	required_device<ncr5380_device> m_scsic;
 	required_device<watchdog_timer_device> m_watchdog;
@@ -127,6 +129,7 @@ protected:
 	virtual void cabinet_outputs_w(uint16_t) { }
 
 	void volume_control(uint8_t direction, uint8_t clock);
+	void set_coin_lockout(unsigned channel, bool state);
 	void lamp_latch_w(uint16_t data, uint16_t mem_mask);
 	void lamp_port_a_w(uint8_t data);
 	void update_lamps();
@@ -242,6 +245,12 @@ void bfm_cobra3_state::volume_control(uint8_t direction, uint8_t clock)
 			m_av110->set_output_gain(1, fraction);
 		}
 	}
+}
+
+void bfm_cobra3_state::set_coin_lockout(unsigned channel, bool state)
+{
+	machine().bookkeeping().coin_lockout_w(channel, state);
+	m_coin_lockouts[channel] = state;
 }
 
 void bfm_cobra3_state::av110_reset_strobe_w(u8)
@@ -389,11 +398,11 @@ void bfm_cobra3_state::mem_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 						if (ACCESSING_BITS_8_15)
 						{
 							uint8_t const enables = data >> 8;
-							machine().bookkeeping().coin_lockout_w(0, !BIT(enables, 3)); // £1
-							machine().bookkeeping().coin_lockout_w(1, !BIT(enables, 2)); // 50p
-							machine().bookkeeping().coin_lockout_w(2, !BIT(enables, 1)); // 20p
-							machine().bookkeeping().coin_lockout_w(3, !BIT(enables, 0)); // 10p
-							machine().bookkeeping().coin_lockout_w(4, !BIT(enables, 4)); // fifth validator channel
+							set_coin_lockout(0, !BIT(enables, 3)); // £1
+							set_coin_lockout(1, !BIT(enables, 2)); // 50p
+							set_coin_lockout(2, !BIT(enables, 1)); // 20p
+							set_coin_lockout(3, !BIT(enables, 0)); // 10p
+							set_coin_lockout(4, !BIT(enables, 4)); // fifth validator channel
 						}
 						break;
 
