@@ -157,6 +157,184 @@ copyright-holders:MagikalUnicorn
 			<color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.12" />
 		</rect>
 	</element>
+	<element name="coin_acceptor_body">
+		<!-- Black moulded housing and the three recessed panel apertures. -->
+		<rect>
+			<color red="0.015" green="0.015" blue="0.015" />
+		</rect>
+		<rect>
+			<bounds x="0.025" y="0.025" width="0.950" height="0.055" />
+			<color red="0.12" green="0.12" blue="0.12" />
+		</rect>
+		<rect>
+			<bounds x="0.025" y="0.080" width="0.045" height="0.820" />
+			<color red="0.08" green="0.08" blue="0.08" />
+		</rect>
+		<rect>
+			<bounds x="0.930" y="0.080" width="0.045" height="0.820" />
+			<color red="0.025" green="0.025" blue="0.025" />
+		</rect>
+		<rect>
+			<bounds x="0.025" y="0.880" width="0.950" height="0.095" />
+			<color red="0.01" green="0.01" blue="0.01" />
+		</rect>
+		<!-- A continuous raised bezel surrounds and separates all three panels. -->
+		<rect>
+			<bounds x="0.055" y="0.095" width="0.890" height="0.800" />
+			<color red="0.10" green="0.10" blue="0.10" />
+		</rect>
+		<rect>
+			<bounds x="0.065" y="0.110" width="0.870" height="0.770" />
+			<color red="0.025" green="0.025" blue="0.025" />
+		</rect>
+		<rect>
+			<bounds x="0.075" y="0.125" width="0.850" height="0.740" />
+			<color red="0.005" green="0.005" blue="0.005" />
+		</rect>
+		<!-- The blue coin-return panel is not illuminated. -->
+		<rect>
+			<bounds x="0.385" y="0.160" width="0.230" height="0.660" />
+			<color red="0.035" green="0.035" blue="0.20" />
+		</rect>
+		<rect>
+			<bounds x="0.395" y="0.170" width="0.210" height="0.035" />
+			<color red="0.20" green="0.20" blue="0.48" />
+		</rect>
+		<rect>
+			<bounds x="0.395" y="0.245" width="0.210" height="0.018" />
+			<color red="0.01" green="0.01" blue="0.06" />
+		</rect>
+		<rect>
+			<bounds x="0.395" y="0.320" width="0.210" height="0.018" />
+			<color red="0.01" green="0.01" blue="0.06" />
+		</rect>
+		<rect>
+			<bounds x="0.395" y="0.395" width="0.210" height="0.018" />
+			<color red="0.01" green="0.01" blue="0.06" />
+		</rect>
+		<rect>
+			<bounds x="0.395" y="0.470" width="0.210" height="0.018" />
+			<color red="0.01" green="0.01" blue="0.06" />
+		</rect>
+		<rect>
+			<bounds x="0.395" y="0.545" width="0.210" height="0.018" />
+			<color red="0.01" green="0.01" blue="0.06" />
+		</rect>
+		<rect>
+			<bounds x="0.395" y="0.620" width="0.210" height="0.018" />
+			<color red="0.01" green="0.01" blue="0.06" />
+		</rect>
+		<rect>
+			<bounds x="0.395" y="0.695" width="0.210" height="0.018" />
+			<color red="0.01" green="0.01" blue="0.06" />
+		</rect>
+		<text string="PUSH">
+			<bounds x="0.415" y="0.300" width="0.170" height="0.075" />
+			<color red="0.24" green="0.24" blue="0.40" />
+		</text>
+		<text string="TO REJECT">
+			<bounds x="0.400" y="0.405" width="0.200" height="0.070" />
+			<color red="0.20" green="0.20" blue="0.36" />
+		</text>
+	</element>
+	<element name="coin_acceptor_lamps" defstate="0">
+		<!-- Preserve the housing coordinate space around the illuminated panels. -->
+		<rect>
+			<color alpha="0.0" />
+		</rect>
+		<!-- Both red panels are lit by the acceptor lamp. -->
+		<rect>
+			<bounds x="0.090" y="0.160" width="0.255" height="0.660" />
+			<color state="0" red="0.16" green="0.015" blue="0.02" />
+			<color state="255" red="0.95" green="0.08" blue="0.06" />
+		</rect>
+		<rect>
+			<bounds x="0.655" y="0.160" width="0.255" height="0.660" />
+			<color state="0" red="0.16" green="0.015" blue="0.02" />
+			<color state="255" red="0.95" green="0.08" blue="0.06" />
+		</rect>
+		<rect>
+			<bounds x="0.105" y="0.175" width="0.225" height="0.630" />
+			<color state="0" red="0.075" green="0.006" blue="0.01" />
+			<color state="255" red="0.62" green="0.025" blue="0.025" />
+		</rect>
+		<rect>
+			<bounds x="0.670" y="0.175" width="0.225" height="0.630" />
+			<color state="0" red="0.075" green="0.006" blue="0.01" />
+			<color state="255" red="0.62" green="0.025" blue="0.025" />
+		</rect>
+		<text string="C">
+			<bounds x="0.105" y="0.180" width="0.175" height="0.300" />
+			<color state="0" red="0.28" green="0.025" blue="0.025" />
+			<color state="255" red="1.00" green="0.24" blue="0.18" />
+		</text>
+		<text string="COINS">
+			<bounds x="0.105" y="0.475" width="0.175" height="0.075" />
+			<color state="0" red="0.25" green="0.02" blue="0.02" />
+			<color state="255" red="1.00" green="0.20" blue="0.14" />
+		</text>
+		<text string="10p 20p">
+			<bounds x="0.105" y="0.560" width="0.175" height="0.065" />
+			<color state="0" red="0.22" green="0.02" blue="0.02" />
+			<color state="255" red="0.90" green="0.16" blue="0.12" />
+		</text>
+		<text string="50p &#xa3;1">
+			<bounds x="0.105" y="0.640" width="0.175" height="0.065" />
+			<color state="0" red="0.22" green="0.02" blue="0.02" />
+			<color state="255" red="0.90" green="0.16" blue="0.12" />
+		</text>
+		<disk>
+			<bounds x="0.680" y="0.195" width="0.098" height="0.170" />
+			<color state="0" red="0.27" green="0.02" blue="0.025" />
+			<color state="255" red="1.00" green="0.20" blue="0.15" />
+		</disk>
+		<disk>
+			<bounds x="0.703" y="0.234" width="0.053" height="0.092" />
+			<color state="0" red="0.065" green="0.005" blue="0.008" />
+			<color state="255" red="0.55" green="0.02" blue="0.02" />
+		</disk>
+		<disk>
+			<bounds x="0.680" y="0.335" width="0.098" height="0.170" />
+			<color state="0" red="0.27" green="0.02" blue="0.025" />
+			<color state="255" red="1.00" green="0.20" blue="0.15" />
+		</disk>
+		<disk>
+			<bounds x="0.703" y="0.374" width="0.053" height="0.092" />
+			<color state="0" red="0.065" green="0.005" blue="0.008" />
+			<color state="255" red="0.55" green="0.02" blue="0.02" />
+		</disk>
+		<disk>
+			<bounds x="0.680" y="0.475" width="0.098" height="0.170" />
+			<color state="0" red="0.27" green="0.02" blue="0.025" />
+			<color state="255" red="1.00" green="0.20" blue="0.15" />
+		</disk>
+		<disk>
+			<bounds x="0.703" y="0.514" width="0.053" height="0.092" />
+			<color state="0" red="0.065" green="0.005" blue="0.008" />
+			<color state="255" red="0.55" green="0.02" blue="0.02" />
+		</disk>
+		<disk>
+			<bounds x="0.680" y="0.615" width="0.098" height="0.170" />
+			<color state="0" red="0.27" green="0.02" blue="0.025" />
+			<color state="255" red="1.00" green="0.20" blue="0.15" />
+		</disk>
+		<disk>
+			<bounds x="0.703" y="0.654" width="0.053" height="0.092" />
+			<color state="0" red="0.065" green="0.005" blue="0.008" />
+			<color state="255" red="0.55" green="0.02" blue="0.02" />
+		</disk>
+		<!-- The coin aperture is illuminated by the same lamp as the red panels. -->
+		<rect>
+			<bounds x="0.273" y="0.220" width="0.045" height="0.520" />
+			<color state="0" red="0.20" green="0.12" blue="0.055" />
+			<color state="255" red="1.00" green="0.48" blue="0.16" />
+		</rect>
+		<rect>
+			<bounds x="0.285" y="0.240" width="0.021" height="0.480" />
+			<color state="0" red="0.005" green="0.005" blue="0.005" />
+			<color state="255" red="0.42" green="0.015" blue="0.008" />
+		</rect>
+	</element>
 
 	<element name="lamp_label_0">
 		<text string="A">
@@ -224,12 +402,6 @@ copyright-holders:MagikalUnicorn
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
-	<element name="lamp_label_13">
-		<text string="COIN ACCEPTOR">
-			<color red="0.00" green="0.00" blue="0.00" />
-		</text>
-	</element>
-
 	<repeat count="5">
 		<param name="n" start="14" increment="1" />
 		<param name="group" start="5" increment="-1" />
@@ -252,9 +424,15 @@ copyright-holders:MagikalUnicorn
 
 	<view name="Screen and Lamps">
 		<element ref="panel">
-			<bounds x="-144" y="-24" width="1056" height="696" />
+			<bounds x="-144" y="-192" width="1056" height="864" />
 		</element>
 
+		<element ref="coin_acceptor_body">
+			<bounds x="648" y="-168" width="240" height="138" />
+		</element>
+		<element id="coin_acceptor_lamps" name="lamp13" ref="coin_acceptor_lamps">
+			<bounds x="648" y="-168" width="240" height="138" />
+		</element>
 		<screen index="0">
 			<bounds x="0" y="0" width="768" height="576" />
 		</screen>
@@ -366,9 +544,9 @@ copyright-holders:MagikalUnicorn
 			</element>
 		</repeat>
 
-		<repeat count="3">
-			<param name="n" start="13" increment="1" />
-			<param name="x" start="465" increment="77" />
+		<repeat count="2">
+			<param name="n" start="14" increment="1" />
+			<param name="x" start="542" increment="77" />
 			<element name="lamp~n~" ref="lamp">
 				<bounds x="~x~" y="607" width="70" height="16" />
 			</element>
@@ -396,7 +574,15 @@ copyright-holders:MagikalUnicorn
 	</view>
 
 	<script><![CDATA[
-		local lamp_numbers = { 0, 1, 2, 5, 6, 7 }
+		local lamp_items = {
+			{ number = 0, face = "button0_face", highlight = "button0_highlight" },
+			{ number = 1, face = "button1_face", highlight = "button1_highlight" },
+			{ number = 2, face = "button2_face", highlight = "button2_highlight" },
+			{ number = 5, face = "button5_face", highlight = "button5_highlight" },
+			{ number = 6, face = "button6_face", highlight = "button6_highlight" },
+			{ number = 7, face = "button7_face", highlight = "button7_highlight" },
+			{ number = 13, face = "coin_acceptor_lamps" }
+		}
 		local maximum_level = 255
 		-- Filament response is nonlinear, but exponential relaxation is a useful compact model.
 		-- With the exact lamp unknown, use the fast end of published miniature-lamp ranges:
@@ -416,14 +602,16 @@ copyright-holders:MagikalUnicorn
 					local view = file.views["Screen and Lamps"]
 					local lamps = { }
 
-					for _, number in ipairs(lamp_numbers) do
+					for _, item in ipairs(lamp_items) do
 						local lamp = {
-							output = file.device:output(string.format("lamp%u", number)),
-							face = view.items[string.format("button%u_face", number)],
-							highlight = view.items[string.format("button%u_highlight", number)] }
+							output = file.device:output(string.format("lamp%u", item.number)),
+							face = view.items[item.face],
+							highlight = item.highlight and view.items[item.highlight] or nil }
 						lamp.level = lamp.output:get() ~= 0 and maximum_level or 0
 						lamp.face:set_element_state_callback(state_callback(lamp))
-						lamp.highlight:set_element_state_callback(state_callback(lamp))
+						if lamp.highlight then
+							lamp.highlight:set_element_state_callback(state_callback(lamp))
+						end
 						table.insert(lamps, lamp)
 					end
 
