@@ -111,12 +111,12 @@ private:
 	int m_current_pos;
 	int m_current_limit;
 
-	int m_horizontal_size;
-	int m_vertical_size;
-	int m_mb_width;
-	int m_mb_height;
-	int m_luma_pitch;
-	int m_chroma_pitch;
+	s32 m_horizontal_size;
+	s32 m_vertical_size;
+	s32 m_mb_width;
+	s32 m_mb_height;
+	s32 m_luma_pitch;
+	s32 m_chroma_pitch;
 	double m_frame_rate;
 	u8 m_intra_quantizer_matrix[64];
 	u8 m_non_intra_quantizer_matrix[64];
