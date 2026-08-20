@@ -477,7 +477,7 @@ void bfm_cobra3_state::bfm_cobra3_map(address_map &map)
 	map(0x00800000, 0x009fffff).m(m_scc66470, FUNC(scc66470_device::map)).cswidth(16);
 	map(0x00a40000, 0x00a4007f).rw(m_sti3400, FUNC(sti3400_device::read), FUNC(sti3400_device::write));
 	map(0x00a80000, 0x00a80001).w(FUNC(bfm_cobra3_state::av110_reset_strobe_w)).umask16(0x00ff);
-	map(0x00a81000, 0x00a810ff).rw(m_av110, FUNC(tms320av110_device::read), FUNC(tms320av110_device::write)).umask16(0x00ff);
+	map(0x00a81000, 0x00a810ff).m(m_av110, FUNC(tms320av110_device::map)).umask16(0x00ff);
 }
 
 void bfm_cobra3_state::ramdac_map(address_map &map)
