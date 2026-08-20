@@ -6,7 +6,6 @@
 
     This is a clean-room implementation written directly from the syntax,
     semantics and decoding process specified by the following standards.
-    No source code from another MPEG decoder was consulted.
 
     References:
 
