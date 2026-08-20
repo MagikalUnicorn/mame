@@ -19,51 +19,142 @@ copyright-holders:MagikalUnicorn
 		</rect>
 	</element>
 	<element name="lamp_violet" defstate="0">
-		<rect state="0">
-			<color red="0.20" green="0.05" blue="0.24" />
+		<rect>
+			<color red="0.01" green="0.01" blue="0.01" />
 		</rect>
-		<rect state="1">
-			<color red="0.75" green="0.25" blue="0.90" />
+		<rect>
+			<bounds x="0.10" y="0.10" width="0.80" height="0.80" />
+			<color state="0" red="0.20" green="0.05" blue="0.24" />
+			<color state="255" red="0.75" green="0.25" blue="0.90" />
 		</rect>
 	</element>
 	<element name="lamp_blue" defstate="0">
-		<rect state="0">
-			<color red="0.03" green="0.08" blue="0.25" />
+		<rect>
+			<color red="0.01" green="0.01" blue="0.01" />
 		</rect>
-		<rect state="1">
-			<color red="0.15" green="0.35" blue="1.00" />
+		<rect>
+			<bounds x="0.10" y="0.10" width="0.80" height="0.80" />
+			<color state="0" red="0.03" green="0.08" blue="0.25" />
+			<color state="255" red="0.15" green="0.35" blue="1.00" />
 		</rect>
 	</element>
 	<element name="lamp_pink" defstate="0">
-		<rect state="0">
-			<color red="0.28" green="0.06" blue="0.14" />
+		<rect>
+			<color red="0.01" green="0.01" blue="0.01" />
 		</rect>
-		<rect state="1">
-			<color red="1.00" green="0.35" blue="0.65" />
+		<rect>
+			<bounds x="0.10" y="0.10" width="0.80" height="0.80" />
+			<color state="0" red="0.28" green="0.06" blue="0.14" />
+			<color state="255" red="1.00" green="0.35" blue="0.65" />
 		</rect>
 	</element>
 	<element name="lamp_orange" defstate="0">
-		<rect state="0">
-			<color red="0.30" green="0.12" blue="0.02" />
+		<rect>
+			<color red="0.01" green="0.01" blue="0.01" />
 		</rect>
-		<rect state="1">
-			<color red="1.00" green="0.45" blue="0.05" />
+		<rect>
+			<bounds x="0.10" y="0.10" width="0.80" height="0.80" />
+			<color state="0" red="0.30" green="0.12" blue="0.02" />
+			<color state="255" red="1.00" green="0.45" blue="0.05" />
 		</rect>
 	</element>
 	<element name="lamp_green" defstate="0">
-		<rect state="0">
-			<color red="0.03" green="0.20" blue="0.05" />
+		<rect>
+			<color red="0.01" green="0.01" blue="0.01" />
 		</rect>
-		<rect state="1">
-			<color red="0.10" green="0.90" blue="0.20" />
+		<rect>
+			<bounds x="0.10" y="0.10" width="0.80" height="0.80" />
+			<color state="0" red="0.03" green="0.20" blue="0.05" />
+			<color state="255" red="0.10" green="0.90" blue="0.20" />
 		</rect>
 	</element>
 	<element name="lamp_red" defstate="0">
-		<rect state="0">
-			<color red="0.28" green="0.03" blue="0.03" />
+		<rect>
+			<color red="0.01" green="0.01" blue="0.01" />
 		</rect>
-		<rect state="1">
-			<color red="1.00" green="0.12" blue="0.08" />
+		<rect>
+			<bounds x="0.10" y="0.10" width="0.80" height="0.80" />
+			<color state="0" red="0.28" green="0.03" blue="0.03" />
+			<color state="255" red="1.00" green="0.12" blue="0.08" />
+		</rect>
+	</element>
+	<element name="button_detail">
+		<!-- Raised retaining ridge around the illuminated insert. -->
+		<rect>
+			<bounds x="0.055" y="0.055" width="0.890" height="0.045" />
+			<color red="0.13" green="0.13" blue="0.13" />
+		</rect>
+		<rect>
+			<bounds x="0.055" y="0.100" width="0.045" height="0.800" />
+			<color red="0.10" green="0.10" blue="0.10" />
+		</rect>
+		<rect>
+			<bounds x="0.055" y="0.900" width="0.890" height="0.045" />
+			<color red="0.03" green="0.03" blue="0.03" />
+		</rect>
+		<rect>
+			<bounds x="0.900" y="0.100" width="0.045" height="0.800" />
+			<color red="0.04" green="0.04" blue="0.04" />
+		</rect>
+		<!-- Subtle clear-lens highlight and opposing shadow. -->
+		<rect>
+			<bounds x="0.100" y="0.100" width="0.800" height="0.025" />
+			<color red="1.00" green="1.00" blue="1.00" alpha="0.10" />
+		</rect>
+		<rect>
+			<bounds x="0.100" y="0.100" width="0.025" height="0.800" />
+			<color red="1.00" green="1.00" blue="1.00" alpha="0.06" />
+		</rect>
+		<rect>
+			<bounds x="0.100" y="0.875" width="0.800" height="0.025" />
+			<color red="0.00" green="0.00" blue="0.00" alpha="0.22" />
+		</rect>
+		<rect>
+			<bounds x="0.875" y="0.100" width="0.025" height="0.800" />
+			<color red="0.00" green="0.00" blue="0.00" alpha="0.18" />
+		</rect>
+	</element>
+	<element name="button_highlight" defstate="0">
+		<!-- Light from the illuminated insert diffuses into the surrounding grey bezel. -->
+		<rect>
+			<bounds x="0.0875" y="0.075" width="0.825" height="0.025" />
+			<color state="0" red="1.00" green="1.00" blue="1.00" alpha="0.00" />
+			<color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.32" />
+		</rect>
+		<rect>
+			<bounds x="0.075" y="0.0875" width="0.025" height="0.825" />
+			<color state="0" red="1.00" green="1.00" blue="1.00" alpha="0.00" />
+			<color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.32" />
+		</rect>
+		<rect>
+			<bounds x="0.0875" y="0.90" width="0.825" height="0.025" />
+			<color state="0" red="1.00" green="1.00" blue="1.00" alpha="0.00" />
+			<color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.32" />
+		</rect>
+		<rect>
+			<bounds x="0.90" y="0.0875" width="0.025" height="0.825" />
+			<color state="0" red="1.00" green="1.00" blue="1.00" alpha="0.00" />
+			<color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.32" />
+		</rect>
+		<rect>
+			<bounds x="0.075" y="0.0625" width="0.85" height="0.0125" />
+			<color state="0" red="1.00" green="1.00" blue="1.00" alpha="0.00" />
+			<color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.12" />
+		</rect>
+		<rect>
+			<bounds x="0.0625" y="0.075" width="0.0125" height="0.85" />
+			<color state="0" red="1.00" green="1.00" blue="1.00" alpha="0.00" />
+			<color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.12" />
+		</rect>
+		<rect>
+			<bounds x="0.075" y="0.925" width="0.85" height="0.0125" />
+			<color state="0" red="1.00" green="1.00" blue="1.00" alpha="0.00" />
+			<color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.12" />
+		</rect>
+		<rect>
+			<bounds x="0.925" y="0.075" width="0.0125" height="0.85" />
+			<color state="0" red="1.00" green="1.00" blue="1.00" alpha="0.00" />
+			<color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.12" />
 		</rect>
 	</element>
 
@@ -160,6 +251,10 @@ copyright-holders:MagikalUnicorn
 	</repeat>
 
 	<view name="Screen and Lamps">
+		<element ref="panel">
+			<bounds x="-144" y="-24" width="1056" height="696" />
+		</element>
+
 		<screen index="0">
 			<bounds x="0" y="0" width="768" height="576" />
 		</screen>
@@ -168,38 +263,96 @@ copyright-holders:MagikalUnicorn
 			<bounds x="0" y="582" width="768" height="66" />
 		</element>
 
-		<element name="lamp0" ref="lamp_violet" inputtag="STROBE0" inputmask="0x01">
-			<bounds x="80" y="586" width="70" height="16" />
+		<element id="button0_face" name="lamp0" ref="lamp_violet" inputtag="STROBE0" inputmask="0x01">
+			<bounds x="-120" y="128" width="72" height="72" />
 		</element>
-		<element name="lamp1" ref="lamp_blue" inputtag="STROBE0" inputmask="0x02">
-			<bounds x="157" y="586" width="70" height="16" />
+		<element ref="button_detail">
+			<bounds x="-120" y="128" width="72" height="72" />
 		</element>
-		<element name="lamp2" ref="lamp_pink" inputtag="STROBE0" inputmask="0x04">
-			<bounds x="234" y="586" width="70" height="16" />
+		<element id="button0_highlight" name="lamp0" ref="button_highlight">
+			<bounds x="-120" y="128" width="72" height="72" />
+			<color red="0.61" green="0.46" blue="0.66" />
+		</element>
+		<element ref="lamp_label_0">
+			<bounds x="-120" y="128" width="72" height="72" />
+		</element>
+		<element id="button1_face" name="lamp1" ref="lamp_blue" inputtag="STROBE0" inputmask="0x02">
+			<bounds x="-120" y="236" width="72" height="72" />
+		</element>
+		<element ref="button_detail">
+			<bounds x="-120" y="236" width="72" height="72" />
+		</element>
+		<element id="button1_highlight" name="lamp1" ref="button_highlight">
+			<bounds x="-120" y="236" width="72" height="72" />
+			<color red="0.43" green="0.49" blue="0.69" />
+		</element>
+		<element ref="lamp_label_1">
+			<bounds x="-120" y="236" width="72" height="72" />
+		</element>
+		<element id="button2_face" name="lamp2" ref="lamp_pink" inputtag="STROBE0" inputmask="0x04">
+			<bounds x="-120" y="344" width="72" height="72" />
+		</element>
+		<element ref="button_detail">
+			<bounds x="-120" y="344" width="72" height="72" />
+		</element>
+		<element id="button2_highlight" name="lamp2" ref="button_highlight">
+			<bounds x="-120" y="344" width="72" height="72" />
+			<color red="0.69" green="0.49" blue="0.58" />
+		</element>
+		<element ref="lamp_label_2">
+			<bounds x="-120" y="344" width="72" height="72" />
 		</element>
 		<element name="lamp3" ref="lamp" inputtag="STROBE0" inputmask="0x08">
+			<bounds x="311" y="586" width="70" height="16" />
+		</element>
+		<element ref="lamp_label_3">
 			<bounds x="311" y="586" width="70" height="16" />
 		</element>
 		<element name="lamp4" ref="lamp" inputtag="STROBE0" inputmask="0x10">
 			<bounds x="388" y="586" width="70" height="16" />
 		</element>
-		<element name="lamp5" ref="lamp_orange" inputtag="STROBE0" inputmask="0x20">
-			<bounds x="465" y="586" width="70" height="16" />
+		<element ref="lamp_label_4">
+			<bounds x="388" y="586" width="70" height="16" />
 		</element>
-		<element name="lamp6" ref="lamp_green" inputtag="STROBE0" inputmask="0x40">
-			<bounds x="542" y="586" width="70" height="16" />
+		<element id="button7_face" name="lamp7" ref="lamp_red" inputtag="STROBE0" inputmask="0x80">
+			<bounds x="816" y="128" width="72" height="72" />
 		</element>
-		<element name="lamp7" ref="lamp_red" inputtag="STROBE0" inputmask="0x80">
-			<bounds x="619" y="586" width="70" height="16" />
+		<element ref="button_detail">
+			<bounds x="816" y="128" width="72" height="72" />
 		</element>
-
-		<repeat count="8">
-			<param name="n" start="0" increment="1" />
-			<param name="x" start="80" increment="77" />
-			<element ref="lamp_label_~n~">
-				<bounds x="~x~" y="586" width="70" height="16" />
-			</element>
-		</repeat>
+		<element id="button7_highlight" name="lamp7" ref="button_highlight">
+			<bounds x="816" y="128" width="72" height="72" />
+			<color red="0.69" green="0.42" blue="0.41" />
+		</element>
+		<element ref="lamp_label_7">
+			<bounds x="816" y="128" width="72" height="72" />
+		</element>
+		<element id="button6_face" name="lamp6" ref="lamp_green" inputtag="STROBE0" inputmask="0x40">
+			<bounds x="816" y="236" width="72" height="72" />
+		</element>
+		<element ref="button_detail">
+			<bounds x="816" y="236" width="72" height="72" />
+		</element>
+		<element id="button6_highlight" name="lamp6" ref="button_highlight">
+			<bounds x="816" y="236" width="72" height="72" />
+			<color red="0.42" green="0.66" blue="0.45" />
+		</element>
+		<element ref="lamp_label_6">
+			<bounds x="816" y="236" width="72" height="72" />
+		</element>
+		<element id="button5_face" name="lamp5" ref="lamp_orange" inputtag="STROBE0" inputmask="0x20">
+			<bounds x="816" y="344" width="72" height="72" />
+		</element>
+		<element ref="button_detail">
+			<bounds x="816" y="344" width="72" height="72" />
+		</element>
+		<element id="button5_highlight" name="lamp5" ref="button_highlight">
+			<bounds x="816" y="344" width="72" height="72" />
+			<color red="0.69" green="0.52" blue="0.40" />
+		</element>
+		<element ref="lamp_label_5">
+			<bounds x="816" y="344" width="72" height="72" />
+		</element>
 
 		<repeat count="5">
 			<param name="n" start="8" increment="1" />
@@ -241,4 +394,61 @@ copyright-holders:MagikalUnicorn
 			<bounds x="0" y="0" width="768" height="576" />
 		</screen>
 	</view>
+
+	<script><![CDATA[
+		local lamp_numbers = { 0, 1, 2, 5, 6, 7 }
+		local maximum_level = 255
+		-- Filament response is nonlinear, but exponential relaxation is a useful compact model.
+		-- With the exact lamp unknown, use the fast end of published miniature-lamp ranges:
+		-- 100 ms to reach 90% brightness and 60 ms to decay to 10% brightness.
+		local rise_time_to_90_percent = 0.10
+		local fall_time_to_10_percent = 0.06
+		local response_scale = math.log(10.0)
+
+		local function state_callback(lamp)
+			return function ()
+				return math.floor(lamp.level + 0.5)
+			end
+		end
+
+		file:set_resolve_tags_callback(
+				function ()
+					local view = file.views["Screen and Lamps"]
+					local lamps = { }
+
+					for _, number in ipairs(lamp_numbers) do
+						local lamp = {
+							output = file.device:output(string.format("lamp%u", number)),
+							face = view.items[string.format("button%u_face", number)],
+							highlight = view.items[string.format("button%u_highlight", number)] }
+						lamp.level = lamp.output:get() ~= 0 and maximum_level or 0
+						lamp.face:set_element_state_callback(state_callback(lamp))
+						lamp.highlight:set_element_state_callback(state_callback(lamp))
+						table.insert(lamps, lamp)
+					end
+
+					local previous_time = emu.attotime(machine.time)
+					view:set_prepare_items_callback(
+							function ()
+								local current_time = machine.time
+								local elapsed = (current_time - previous_time):as_double()
+								previous_time = emu.attotime(current_time)
+								local time_discontinuity = elapsed < 0 or elapsed > 0.25
+
+								for _, lamp in ipairs(lamps) do
+									local target = lamp.output:get() ~= 0 and maximum_level or 0
+									if time_discontinuity then
+										lamp.level = target
+									elseif target ~= lamp.level then
+										local response_time = target > lamp.level and rise_time_to_90_percent or fall_time_to_10_percent
+										local fraction = 1.0 - math.exp(-response_scale * elapsed / response_time)
+										lamp.level = lamp.level + (target - lamp.level) * fraction
+										if math.abs(target - lamp.level) < 0.5 then
+											lamp.level = target
+										end
+									end
+								end
+							end)
+				end)
+	]]></script>
 </mamelayout>
