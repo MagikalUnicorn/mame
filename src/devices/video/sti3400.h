@@ -73,6 +73,8 @@ private:
 	static constexpr u32 HEADER_FIFO_BYTES = 0x20;
 	// Software buffers cover the maximum amount representable by BBL.
 	static constexpr u32 COMPRESSED_DATA_BUFFER_BYTES = 4U * 1024 * 1024;
+	// This software queue holds start codes pending host service; 256 covers the
+	// observed backlog and permits masked ring wrap.
 	static constexpr u32 START_CODE_EVENT_COUNT = 256;
 	static_assert(std::has_single_bit(COMPRESSED_DATA_BUFFER_BYTES));
 	static_assert(std::has_single_bit(START_CODE_EVENT_COUNT));

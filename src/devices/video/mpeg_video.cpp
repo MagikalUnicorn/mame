@@ -33,8 +33,6 @@
 #include <cmath>
 #include <numbers>
 
-namespace {
-
 struct vlc_entry
 {
 	u32 code;
@@ -299,8 +297,6 @@ bool decode_vlc(const T (&table)[N], int max_bits, P &&peek, S &&skip, int &valu
 	}
 	return false;
 }
-
-} // anonymous namespace
 
 const u8 mpeg_video::s_default_intra_quantizer_matrix[64] =
 {
