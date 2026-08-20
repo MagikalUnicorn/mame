@@ -3,6 +3,13 @@
 license:CC0-1.0
 copyright-holders:MagikalUnicorn
 -->
+<!--
+Physical control positioning is reconstructed from photographs of a Top of
+the Pops Cobra 3 cabinet, the only known source for this cabinet layout.  The
+Telly Addicts cabinet may differ, and the button shades are visual estimates.
+The cabinet positions of the Telly and Addicts lamps are unknown; they are
+shown as diagnostic indicators at the bottom of the view.
+-->
 <mamelayout version="2">
 	<element name="panel">
 		<rect>
@@ -28,14 +35,14 @@ copyright-holders:MagikalUnicorn
 			<color state="255" red="0.75" green="0.25" blue="0.90" />
 		</rect>
 	</element>
-	<element name="lamp_blue" defstate="0">
+	<element name="lamp_teal" defstate="0">
 		<rect>
 			<color red="0.01" green="0.01" blue="0.01" />
 		</rect>
 		<rect>
 			<bounds x="0.10" y="0.10" width="0.80" height="0.80" />
-			<color state="0" red="0.03" green="0.08" blue="0.25" />
-			<color state="255" red="0.15" green="0.35" blue="1.00" />
+			<color state="0" red="0.02" green="0.16" blue="0.16" />
+			<color state="255" red="0.08" green="0.72" blue="0.66" />
 		</rect>
 	</element>
 	<element name="lamp_pink" defstate="0">
@@ -495,7 +502,7 @@ copyright-holders:MagikalUnicorn
 		<element ref="answer_left_a_label">
 			<bounds x="-120" y="126" width="72" height="72" />
 		</element>
-		<element id="answer_left_b_face" name="lamp1" ref="lamp_blue" inputtag="STROBE0" inputmask="0x02">
+		<element id="answer_left_b_face" name="lamp1" ref="lamp_teal" inputtag="STROBE0" inputmask="0x02">
 			<bounds x="-120" y="236" width="72" height="72" />
 		</element>
 		<element ref="button_detail">
@@ -503,7 +510,7 @@ copyright-holders:MagikalUnicorn
 		</element>
 		<element id="answer_left_b_highlight" name="lamp1" ref="button_highlight">
 			<bounds x="-120" y="236" width="72" height="72" />
-			<color red="0.43" green="0.49" blue="0.69" />
+			<color red="0.42" green="0.63" blue="0.61" />
 		</element>
 		<element ref="answer_left_b_label">
 			<bounds x="-120" y="234" width="72" height="72" />
@@ -659,6 +666,7 @@ copyright-holders:MagikalUnicorn
 			<bounds x="696" y="689" width="56" height="14" />
 		</element>
 
+		<!-- The arrangement of these Telly and Addicts lamps is not known. -->
 		<repeat count="2">
 			<param name="n" start="14" increment="1" />
 			<param name="x" start="542" increment="77" />
