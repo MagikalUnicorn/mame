@@ -634,45 +634,45 @@ shown as diagnostic indicators at the bottom of the view.
 		</element>
 
 		<element id="select_face" name="lamp12" ref="lamp_yellow" inputtag="STROBE1" inputmask="0x10">
-			<bounds x="388" y="668" width="56" height="56" />
+			<bounds x="408" y="668" width="76" height="56" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="388" y="668" width="56" height="56" />
+			<bounds x="408" y="668" width="76" height="56" />
 		</element>
 		<element id="select_highlight" name="lamp12" ref="button_highlight">
-			<bounds x="388" y="668" width="56" height="56" />
+			<bounds x="408" y="668" width="76" height="56" />
 			<color red="0.69" green="0.60" blue="0.34" />
 		</element>
 		<element ref="select_label">
-			<bounds x="388" y="689" width="56" height="14" />
+			<bounds x="408" y="689" width="76" height="14" />
 		</element>
 
 		<element id="start_face" name="lamp4" ref="lamp_yellow" inputtag="STROBE0" inputmask="0x10">
-			<bounds x="542" y="668" width="56" height="56" />
+			<bounds x="562" y="668" width="76" height="56" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="542" y="668" width="56" height="56" />
+			<bounds x="562" y="668" width="76" height="56" />
 		</element>
 		<element id="start_highlight" name="lamp4" ref="button_highlight">
-			<bounds x="542" y="668" width="56" height="56" />
+			<bounds x="562" y="668" width="76" height="56" />
 			<color red="0.69" green="0.60" blue="0.34" />
 		</element>
 		<element ref="start_label">
-			<bounds x="542" y="689" width="56" height="14" />
+			<bounds x="562" y="689" width="76" height="14" />
 		</element>
 
 		<element id="collect_face" name="lamp3" ref="lamp_yellow" inputtag="STROBE0" inputmask="0x08">
-			<bounds x="696" y="668" width="56" height="56" />
+			<bounds x="716" y="668" width="76" height="56" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="696" y="668" width="56" height="56" />
+			<bounds x="716" y="668" width="76" height="56" />
 		</element>
 		<element id="collect_highlight" name="lamp3" ref="button_highlight">
-			<bounds x="696" y="668" width="56" height="56" />
+			<bounds x="716" y="668" width="76" height="56" />
 			<color red="0.69" green="0.60" blue="0.34" />
 		</element>
 		<element ref="collect_label">
-			<bounds x="696" y="689" width="56" height="14" />
+			<bounds x="716" y="689" width="76" height="14" />
 		</element>
 
 		<!-- The arrangement of these Telly and Addicts lamps is not known. -->
