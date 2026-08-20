@@ -9,6 +9,8 @@ the Pops Cobra 3 cabinet, the only known source for this cabinet layout.  The
 Telly Addicts cabinet may differ, and the button shades are visual estimates.
 The cabinet positions of the Telly and Addicts lamps are unknown; they are
 shown as diagnostic indicators at the bottom of the view.
+The coin-value text does not illuminate on the physical coin acceptor; its
+highlighting here indicates the coin-channel acceptance state for convenience.
 -->
 <mamelayout version="2">
 	<element name="panel">
