@@ -760,7 +760,9 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	m_sti3400->irq().set_inputline(m_maincpu, 6);
 
 	auto &scsi(NSCSI_BUS(config, m_scsibus));
-	auto &cdrom(NSCSI_CDROM(config, "cdrom"));
+	// TODO: Verify the original drive speed; 2x was contemporary and is more realistic than the
+	// roughly 9,742 KB/s reported by Cobra diagnostics with the untimed device.
+	auto &cdrom(NSCSI_CDROM_2X(config, "cdrom"));
 	scsi.set_external_device(2, cdrom);
 
 	NCR5380(config, m_scsic);
