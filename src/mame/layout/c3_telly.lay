@@ -352,7 +352,7 @@ shown as diagnostic indicators at the bottom of the view.
 			<color alpha="0.0" />
 		</rect>
 		<text string="10p">
-			<bounds x="0.105" y="0.560" width="0.080" height="0.065" />
+			<bounds x="0.1175" y="0.560" width="0.080" height="0.065" />
 			<color state="0" red="0.22" green="0.02" blue="0.02" />
 			<color state="255" red="0.90" green="0.16" blue="0.12" />
 			<color state="256" red="0.00" green="0.00" blue="0.00" />
@@ -363,7 +363,7 @@ shown as diagnostic indicators at the bottom of the view.
 			<color alpha="0.0" />
 		</rect>
 		<text string="20p">
-			<bounds x="0.200" y="0.560" width="0.080" height="0.065" />
+			<bounds x="0.1915" y="0.560" width="0.080" height="0.065" />
 			<color state="0" red="0.22" green="0.02" blue="0.02" />
 			<color state="255" red="0.90" green="0.16" blue="0.12" />
 			<color state="256" red="0.00" green="0.00" blue="0.00" />
@@ -374,7 +374,7 @@ shown as diagnostic indicators at the bottom of the view.
 			<color alpha="0.0" />
 		</rect>
 		<text string="50p">
-			<bounds x="0.105" y="0.640" width="0.080" height="0.065" />
+			<bounds x="0.1175" y="0.640" width="0.080" height="0.065" />
 			<color state="0" red="0.22" green="0.02" blue="0.02" />
 			<color state="255" red="0.90" green="0.16" blue="0.12" />
 			<color state="256" red="0.00" green="0.00" blue="0.00" />
@@ -385,7 +385,7 @@ shown as diagnostic indicators at the bottom of the view.
 			<color alpha="0.0" />
 		</rect>
 		<text string="&#xa3;1">
-			<bounds x="0.210" y="0.640" width="0.055" height="0.065" />
+			<bounds x="0.2015" y="0.640" width="0.055" height="0.065" />
 			<color state="0" red="0.22" green="0.02" blue="0.02" />
 			<color state="255" red="0.90" green="0.16" blue="0.12" />
 			<color state="256" red="0.00" green="0.00" blue="0.00" />
@@ -499,180 +499,180 @@ shown as diagnostic indicators at the bottom of the view.
 		</element>
 
 		<element id="answer_left_a_face" name="lamp0" ref="lamp_violet" inputtag="STROBE0" inputmask="0x01">
-			<bounds x="-120" y="128" width="72" height="72" />
+			<bounds x="-105" y="128" width="72" height="72" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="-120" y="128" width="72" height="72" />
+			<bounds x="-105" y="128" width="72" height="72" />
 		</element>
 		<element id="answer_left_a_highlight" name="lamp0" ref="button_highlight">
-			<bounds x="-120" y="128" width="72" height="72" />
+			<bounds x="-105" y="128" width="72" height="72" />
 			<color red="0.61" green="0.46" blue="0.66" />
 		</element>
 		<element ref="answer_left_a_label">
-			<bounds x="-120" y="126" width="72" height="72" />
+			<bounds x="-105" y="126" width="72" height="72" />
 		</element>
 		<element id="answer_left_b_face" name="lamp1" ref="lamp_teal" inputtag="STROBE0" inputmask="0x02">
-			<bounds x="-120" y="236" width="72" height="72" />
+			<bounds x="-105" y="236" width="72" height="72" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="-120" y="236" width="72" height="72" />
+			<bounds x="-105" y="236" width="72" height="72" />
 		</element>
 		<element id="answer_left_b_highlight" name="lamp1" ref="button_highlight">
-			<bounds x="-120" y="236" width="72" height="72" />
+			<bounds x="-105" y="236" width="72" height="72" />
 			<color red="0.42" green="0.63" blue="0.61" />
 		</element>
 		<element ref="answer_left_b_label">
-			<bounds x="-120" y="234" width="72" height="72" />
+			<bounds x="-105" y="234" width="72" height="72" />
 		</element>
 		<element id="answer_left_c_face" name="lamp2" ref="lamp_pink" inputtag="STROBE0" inputmask="0x04">
-			<bounds x="-120" y="344" width="72" height="72" />
+			<bounds x="-105" y="344" width="72" height="72" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="-120" y="344" width="72" height="72" />
+			<bounds x="-105" y="344" width="72" height="72" />
 		</element>
 		<element id="answer_left_c_highlight" name="lamp2" ref="button_highlight">
-			<bounds x="-120" y="344" width="72" height="72" />
+			<bounds x="-105" y="344" width="72" height="72" />
 			<color red="0.69" green="0.49" blue="0.58" />
 		</element>
 		<element ref="answer_left_c_label">
-			<bounds x="-120" y="342" width="72" height="72" />
+			<bounds x="-105" y="342" width="72" height="72" />
 		</element>
 		<element id="answer_right_a_face" name="lamp7" ref="lamp_red" inputtag="STROBE0" inputmask="0x80">
-			<bounds x="816" y="128" width="72" height="72" />
+			<bounds x="801" y="128" width="72" height="72" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="816" y="128" width="72" height="72" />
+			<bounds x="801" y="128" width="72" height="72" />
 		</element>
 		<element id="answer_right_a_highlight" name="lamp7" ref="button_highlight">
-			<bounds x="816" y="128" width="72" height="72" />
+			<bounds x="801" y="128" width="72" height="72" />
 			<color red="0.69" green="0.42" blue="0.41" />
 		</element>
 		<element ref="answer_right_a_label">
-			<bounds x="816" y="126" width="72" height="72" />
+			<bounds x="801" y="126" width="72" height="72" />
 		</element>
 		<element id="answer_right_b_face" name="lamp6" ref="lamp_green" inputtag="STROBE0" inputmask="0x40">
-			<bounds x="816" y="236" width="72" height="72" />
+			<bounds x="801" y="236" width="72" height="72" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="816" y="236" width="72" height="72" />
+			<bounds x="801" y="236" width="72" height="72" />
 		</element>
 		<element id="answer_right_b_highlight" name="lamp6" ref="button_highlight">
-			<bounds x="816" y="236" width="72" height="72" />
+			<bounds x="801" y="236" width="72" height="72" />
 			<color red="0.42" green="0.66" blue="0.45" />
 		</element>
 		<element ref="answer_right_b_label">
-			<bounds x="816" y="234" width="72" height="72" />
+			<bounds x="801" y="234" width="72" height="72" />
 		</element>
 		<element id="answer_right_c_face" name="lamp5" ref="lamp_orange" inputtag="STROBE0" inputmask="0x20">
-			<bounds x="816" y="344" width="72" height="72" />
+			<bounds x="801" y="344" width="72" height="72" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="816" y="344" width="72" height="72" />
+			<bounds x="801" y="344" width="72" height="72" />
 		</element>
 		<element id="answer_right_c_highlight" name="lamp5" ref="button_highlight">
-			<bounds x="816" y="344" width="72" height="72" />
+			<bounds x="801" y="344" width="72" height="72" />
 			<color red="0.69" green="0.52" blue="0.40" />
 		</element>
 		<element ref="answer_right_c_label">
-			<bounds x="816" y="342" width="72" height="72" />
+			<bounds x="801" y="342" width="72" height="72" />
 		</element>
 
 		<element id="direction_up_face" name="lamp10" ref="lamp_yellow" inputtag="STROBE1" inputmask="0x04">
-			<bounds x="220" y="635" width="56" height="56" />
+			<bounds x="220" y="620" width="56" height="56" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="220" y="635" width="56" height="56" />
+			<bounds x="220" y="620" width="56" height="56" />
 		</element>
 		<element id="direction_up_highlight" name="lamp10" ref="button_highlight">
-			<bounds x="220" y="635" width="56" height="56" />
+			<bounds x="220" y="620" width="56" height="56" />
 			<color red="0.69" green="0.60" blue="0.34" />
 		</element>
 		<element ref="direction_label">
-			<bounds x="220" y="635" width="56" height="56" />
+			<bounds x="220" y="620" width="56" height="56" />
 		</element>
 		<element id="direction_left_face" name="lamp8" ref="lamp_yellow" inputtag="STROBE1" inputmask="0x01">
-			<bounds x="154" y="668" width="56" height="56" />
+			<bounds x="154" y="653" width="56" height="56" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="154" y="668" width="56" height="56" />
+			<bounds x="154" y="653" width="56" height="56" />
 		</element>
 		<element id="direction_left_highlight" name="lamp8" ref="button_highlight">
-			<bounds x="154" y="668" width="56" height="56" />
+			<bounds x="154" y="653" width="56" height="56" />
 			<color red="0.69" green="0.60" blue="0.34" />
 		</element>
 		<element ref="direction_label">
-			<bounds x="154" y="668" width="56" height="56" />
+			<bounds x="154" y="653" width="56" height="56" />
 			<orientation rotate="270" />
 		</element>
 		<element id="direction_right_face" name="lamp9" ref="lamp_yellow" inputtag="STROBE1" inputmask="0x02">
-			<bounds x="286" y="668" width="56" height="56" />
+			<bounds x="286" y="653" width="56" height="56" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="286" y="668" width="56" height="56" />
+			<bounds x="286" y="653" width="56" height="56" />
 		</element>
 		<element id="direction_right_highlight" name="lamp9" ref="button_highlight">
-			<bounds x="286" y="668" width="56" height="56" />
+			<bounds x="286" y="653" width="56" height="56" />
 			<color red="0.69" green="0.60" blue="0.34" />
 		</element>
 		<element ref="direction_label">
-			<bounds x="286" y="668" width="56" height="56" />
+			<bounds x="286" y="653" width="56" height="56" />
 			<orientation rotate="90" />
 		</element>
 		<element id="direction_down_face" name="lamp11" ref="lamp_yellow" inputtag="STROBE1" inputmask="0x08">
-			<bounds x="220" y="701" width="56" height="56" />
+			<bounds x="220" y="686" width="56" height="56" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="220" y="701" width="56" height="56" />
+			<bounds x="220" y="686" width="56" height="56" />
 		</element>
 		<element id="direction_down_highlight" name="lamp11" ref="button_highlight">
-			<bounds x="220" y="701" width="56" height="56" />
+			<bounds x="220" y="686" width="56" height="56" />
 			<color red="0.69" green="0.60" blue="0.34" />
 		</element>
 		<element ref="direction_label">
-			<bounds x="220" y="701" width="56" height="56" />
+			<bounds x="220" y="686" width="56" height="56" />
 			<orientation rotate="180" />
 		</element>
 
 		<element id="select_face" name="lamp12" ref="lamp_yellow" inputtag="STROBE1" inputmask="0x10">
-			<bounds x="408" y="668" width="76" height="56" />
+			<bounds x="408" y="653" width="76" height="56" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="408" y="668" width="76" height="56" />
+			<bounds x="408" y="653" width="76" height="56" />
 		</element>
 		<element id="select_highlight" name="lamp12" ref="button_highlight">
-			<bounds x="408" y="668" width="76" height="56" />
+			<bounds x="408" y="653" width="76" height="56" />
 			<color red="0.69" green="0.60" blue="0.34" />
 		</element>
 		<element ref="select_label">
-			<bounds x="408" y="689" width="76" height="14" />
+			<bounds x="408" y="674" width="76" height="14" />
 		</element>
 
 		<element id="start_face" name="lamp4" ref="lamp_yellow" inputtag="STROBE0" inputmask="0x10">
-			<bounds x="562" y="668" width="76" height="56" />
+			<bounds x="562" y="653" width="76" height="56" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="562" y="668" width="76" height="56" />
+			<bounds x="562" y="653" width="76" height="56" />
 		</element>
 		<element id="start_highlight" name="lamp4" ref="button_highlight">
-			<bounds x="562" y="668" width="76" height="56" />
+			<bounds x="562" y="653" width="76" height="56" />
 			<color red="0.69" green="0.60" blue="0.34" />
 		</element>
 		<element ref="start_label">
-			<bounds x="562" y="689" width="76" height="14" />
+			<bounds x="562" y="674" width="76" height="14" />
 		</element>
 
 		<element id="collect_face" name="lamp3" ref="lamp_yellow" inputtag="STROBE0" inputmask="0x08">
-			<bounds x="716" y="668" width="76" height="56" />
+			<bounds x="716" y="653" width="76" height="56" />
 		</element>
 		<element ref="button_detail">
-			<bounds x="716" y="668" width="76" height="56" />
+			<bounds x="716" y="653" width="76" height="56" />
 		</element>
 		<element id="collect_highlight" name="lamp3" ref="button_highlight">
-			<bounds x="716" y="668" width="76" height="56" />
+			<bounds x="716" y="653" width="76" height="56" />
 			<color red="0.69" green="0.60" blue="0.34" />
 		</element>
 		<element ref="collect_label">
-			<bounds x="716" y="689" width="76" height="14" />
+			<bounds x="716" y="674" width="76" height="14" />
 		</element>
 
 		<!-- The arrangement of these Telly and Addicts lamps is not known. -->
@@ -680,10 +680,10 @@ shown as diagnostic indicators at the bottom of the view.
 			<param name="n" start="14" increment="1" />
 			<param name="x" start="542" increment="77" />
 			<element name="lamp~n~" ref="lamp">
-				<bounds x="~x~" y="821" width="70" height="16" />
+				<bounds x="~x~" y="806" width="70" height="16" />
 			</element>
 			<element ref="lamp_label_~n~">
-				<bounds x="~x~" y="821" width="70" height="16" />
+				<bounds x="~x~" y="806" width="70" height="16" />
 			</element>
 		</repeat>
 
@@ -691,10 +691,10 @@ shown as diagnostic indicators at the bottom of the view.
 			<param name="n" start="16" increment="1" />
 			<param name="x" start="80" increment="77" />
 			<element name="lamp~n~" ref="lamp">
-				<bounds x="~x~" y="842" width="70" height="16" />
+				<bounds x="~x~" y="827" width="70" height="16" />
 			</element>
 			<element ref="lamp_label_~n~">
-				<bounds x="~x~" y="842" width="70" height="16" />
+				<bounds x="~x~" y="827" width="70" height="16" />
 			</element>
 		</repeat>
 	</view>
