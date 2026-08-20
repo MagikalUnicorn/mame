@@ -475,18 +475,6 @@ copyright-holders:MagikalUnicorn
 		<element ref="lamp_label_2">
 			<bounds x="-120" y="344" width="72" height="72" />
 		</element>
-		<element name="lamp3" ref="lamp" inputtag="STROBE0" inputmask="0x08">
-			<bounds x="311" y="800" width="70" height="16" />
-		</element>
-		<element ref="lamp_label_3">
-			<bounds x="311" y="800" width="70" height="16" />
-		</element>
-		<element name="lamp4" ref="lamp" inputtag="STROBE0" inputmask="0x10">
-			<bounds x="388" y="800" width="70" height="16" />
-		</element>
-		<element ref="lamp_label_4">
-			<bounds x="388" y="800" width="70" height="16" />
-		</element>
 		<element id="button7_face" name="lamp7" ref="lamp_red" inputtag="STROBE0" inputmask="0x80">
 			<bounds x="816" y="128" width="72" height="72" />
 		</element>
@@ -583,11 +571,46 @@ copyright-holders:MagikalUnicorn
 			<orientation rotate="180" />
 		</element>
 
-		<element name="lamp12" ref="lamp" inputtag="STROBE1" inputmask="0x10">
-			<bounds x="388" y="821" width="70" height="16" />
+		<element id="button12_face" name="lamp12" ref="lamp_yellow" inputtag="STROBE1" inputmask="0x10">
+			<bounds x="388" y="668" width="56" height="56" />
+		</element>
+		<element ref="button_detail">
+			<bounds x="388" y="668" width="56" height="56" />
+		</element>
+		<element id="button12_highlight" name="lamp12" ref="button_highlight">
+			<bounds x="388" y="668" width="56" height="56" />
+			<color red="0.69" green="0.60" blue="0.34" />
 		</element>
 		<element ref="lamp_label_12">
-			<bounds x="388" y="821" width="70" height="16" />
+			<bounds x="388" y="689" width="56" height="14" />
+		</element>
+
+		<element id="button4_face" name="lamp4" ref="lamp_yellow" inputtag="STROBE0" inputmask="0x10">
+			<bounds x="542" y="668" width="56" height="56" />
+		</element>
+		<element ref="button_detail">
+			<bounds x="542" y="668" width="56" height="56" />
+		</element>
+		<element id="button4_highlight" name="lamp4" ref="button_highlight">
+			<bounds x="542" y="668" width="56" height="56" />
+			<color red="0.69" green="0.60" blue="0.34" />
+		</element>
+		<element ref="lamp_label_4">
+			<bounds x="542" y="689" width="56" height="14" />
+		</element>
+
+		<element id="button3_face" name="lamp3" ref="lamp_yellow" inputtag="STROBE0" inputmask="0x08">
+			<bounds x="696" y="668" width="56" height="56" />
+		</element>
+		<element ref="button_detail">
+			<bounds x="696" y="668" width="56" height="56" />
+		</element>
+		<element id="button3_highlight" name="lamp3" ref="button_highlight">
+			<bounds x="696" y="668" width="56" height="56" />
+			<color red="0.69" green="0.60" blue="0.34" />
+		</element>
+		<element ref="lamp_label_3">
+			<bounds x="696" y="689" width="56" height="14" />
 		</element>
 
 		<repeat count="2">
@@ -624,6 +647,8 @@ copyright-holders:MagikalUnicorn
 			{ number = 0, face = "button0_face", highlight = "button0_highlight" },
 			{ number = 1, face = "button1_face", highlight = "button1_highlight" },
 			{ number = 2, face = "button2_face", highlight = "button2_highlight" },
+			{ number = 3, face = "button3_face", highlight = "button3_highlight" },
+			{ number = 4, face = "button4_face", highlight = "button4_highlight" },
 			{ number = 5, face = "button5_face", highlight = "button5_highlight" },
 			{ number = 6, face = "button6_face", highlight = "button6_highlight" },
 			{ number = 7, face = "button7_face", highlight = "button7_highlight" },
@@ -631,6 +656,7 @@ copyright-holders:MagikalUnicorn
 			{ number = 9, face = "direction9_face", highlight = "direction9_highlight" },
 			{ number = 10, face = "direction10_face", highlight = "direction10_highlight" },
 			{ number = 11, face = "direction11_face", highlight = "direction11_highlight" },
+			{ number = 12, face = "button12_face", highlight = "button12_highlight" },
 			{ number = 13, face = "coin_acceptor_lamps" }
 		}
 		local maximum_level = 255
