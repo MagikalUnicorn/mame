@@ -16,6 +16,11 @@ shown as diagnostic indicators at the bottom of the view.
 			<color red="0.05" green="0.05" blue="0.05" />
 		</rect>
 	</element>
+	<element name="coin_input">
+		<rect>
+			<color alpha="0.0" />
+		</rect>
+	</element>
 
 	<element name="lamp" defstate="0">
 		<rect state="0">
@@ -480,6 +485,10 @@ shown as diagnostic indicators at the bottom of the view.
 		</element>
 		<element id="coin_a_label" ref="coin_label_pound">
 			<bounds x="648" y="-168" width="240" height="138" />
+		</element>
+		<!-- The left illuminated panel operates the £1 validator channel (Coin A). -->
+		<element ref="coin_input" inputtag="IOSTATUS" inputmask="0x08">
+			<bounds x="669.6" y="-145.92" width="61.2" height="91.08" />
 		</element>
 		<screen index="0">
 			<bounds x="0" y="0" width="768" height="576" />
