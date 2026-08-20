@@ -10,11 +10,11 @@
    - Blank NVRAM produces a RAM ERROR on every startup.  Setting the stored
      volume does not clear this error, but it does not prevent the game from
      running.  The volume initially starts at its minimum setting.  From
-     attract mode, toggle Refill/Volume Setup (R), adjust it with Up/Down,
-     press Start to exit, then toggle Refill/Volume Setup off.
+     attract mode, toggle Refill/Volume Setup Mode (R), adjust it with Up/Down,
+     press Start to exit, then toggle Refill/Volume Setup Mode off.
    - To use the test routines, open the Back and Front Doors (T), then press
      Test (F1).  Use Up/Down to choose a test and Start to enter or leave it.
-     METER TEST requires Refill/Volume Setup to be on before entering and off
+     METER TEST requires Refill/Volume Setup Mode to be on before entering and off
      again before leaving.
    - With the doors open, pressing Test twice within one second supplies two
      demonstration credits.  This is free play rather than an automatic demo:
@@ -22,7 +22,7 @@
      disabled.
    - CASHFLOW TEST is a read-only audit display.  Cash and meter counters do
      not advance while the test routines are active.
-   - Inserting £1 or 20p coins with Refill/Volume Setup active replenishes the
+   - Inserting £1 or 20p coins with Refill/Volume Setup Mode active replenishes the
      corresponding tube and records CASH REFILL rather than CASH IN.
    - The Initial Tube Fill adjusters are sampled when the machine starts.  At
      the default 100%, the £1 tube holds 40 coins (£40) and the 20p tube holds
@@ -553,9 +553,9 @@ static INPUT_PORTS_START( c3_telly )
 	PORT_CONFNAME( 0x04, 0x04, "Payout Unit" )
 	PORT_CONFSETTING(    0x00, "Not Fitted" )
 	PORT_CONFSETTING(    0x04, "Fitted" )
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Cash Door") PORT_CODE(KEYCODE_Y) PORT_TOGGLE
-	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_DOOR ) PORT_NAME("Back and Front Doors") PORT_CODE(KEYCODE_T) PORT_TOGGLE
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_SERVICE ) PORT_NAME("Refill/Volume Setup") PORT_CODE(KEYCODE_R) PORT_TOGGLE
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Cash Door Open") PORT_CODE(KEYCODE_Y) PORT_TOGGLE
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_DOOR ) PORT_NAME("Back and Front Doors Open") PORT_CODE(KEYCODE_T) PORT_TOGGLE
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_SERVICE ) PORT_NAME("Refill/Volume Setup Mode") PORT_CODE(KEYCODE_R) PORT_TOGGLE
 	PORT_BIT( 0xc0, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 
 	PORT_MODIFY("STROBE4")
