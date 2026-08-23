@@ -120,6 +120,7 @@ protected:
 	required_device<ncr5380_device> m_scsic;
 	required_device<watchdog_timer_device> m_watchdog;
 	std::unique_ptr<u8[]> m_scc_line_buffer;
+	std::unique_ptr<u32[]> m_sti_line_buffer;
 
 	u8 m_active_strobe;
 	bool m_vol_clock;
@@ -585,6 +586,7 @@ INPUT_PORTS_END
 void bfm_cobra3_state::machine_start()
 {
 	m_scc_line_buffer = std::make_unique<u8[]>(m_screen->visible_area().width());
+	m_sti_line_buffer = std::make_unique<u32[]>(m_screen->visible_area().width());
 
 	m_active_strobe = 0;
 	m_vol_clock = 0;
@@ -645,15 +647,18 @@ u32 bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap,
 			video.set_origin(visible.left() + (visible.width() - video.width()) / 2, visible.top() + (visible.height() - video.height()) / 2);
 
 			rectangle const draw = video & cliprect;
+			int const source_left = ((source_width * 2 - video.width()) / 2 + draw.left() - video.left()) / 2;
+			int const source_right = ((source_width * 2 - video.width()) / 2 + draw.right() - video.left()) / 2;
 			for (int y = draw.top(); y <= draw.bottom(); y++)
 			{
 				u32 *const line = &bitmap.pix(y);
 				int const source_y = (source_height - video.height()) / 2 + y - video.top();
+				m_sti3400->video_line(source_y, source_left, source_right - source_left + 1, m_sti_line_buffer.get());
 				for (int x = draw.left(); x <= draw.right(); x++)
 				{
 					// SCC66470 8-bit output repeats each stored pixel twice horizontally.
 					int const source_x = ((source_width * 2 - video.width()) / 2 + x - video.left()) / 2;
-					line[x] = m_sti3400->video_pixel(source_x, source_y);
+					line[x] = m_sti_line_buffer[source_x - source_left];
 				}
 			}
 		}

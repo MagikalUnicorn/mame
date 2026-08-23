@@ -23,7 +23,7 @@ public:
 	bool video_valid() const;
 	u16 video_width() const;
 	u16 video_height() const;
-	u32 video_pixel(u32 x, u32 y) const;
+	void video_line(u32 y, u32 x, u32 width, u32 *destination) const;
 
 protected:
 	virtual void device_start() override ATTR_COLD;

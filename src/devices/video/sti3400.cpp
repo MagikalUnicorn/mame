@@ -290,10 +290,12 @@ u16 sti3400_device::video_height() const
 	return m_height;
 }
 
-u32 sti3400_device::video_pixel(u32 x, u32 y) const
+void sti3400_device::video_line(u32 y, u32 x, u32 width, u32 *destination) const
 {
-	if (!video_valid() || (x >= m_width) || (y >= m_height))
-		return 0;
+	assert(video_valid());
+	assert(y < m_height);
+	assert(x <= m_width);
+	assert(width <= (m_width - x));
 
 	const u32 mask = m_dram_size - 1;
 	const u32 base = (u32(m_display_pointer) * BIT_BUFFER_LEVEL_UNIT_BYTES) & mask;
@@ -302,14 +304,22 @@ u32 sti3400_device::video_pixel(u32 x, u32 y) const
 	const u32 luma_bytes = luma_pitch * luma_rows;
 	const u32 chroma_pitch = luma_pitch / 2;
 	const u32 chroma_bytes = chroma_pitch * luma_rows / 2;
-	const int luminance = m_dram[(base + y * luma_pitch + x) & mask];
-	const int cb = m_dram[(base + luma_bytes + (y / 2) * chroma_pitch + x / 2) & mask] - 128;
-	const int cr = m_dram[(base + luma_bytes + chroma_bytes + (y / 2) * chroma_pitch + x / 2) & mask] - 128;
-	const int scaled_luminance = 298 * (luminance - 16);
-	const u8 red = rgb_t::clamp((scaled_luminance + 409 * cr + 128) >> 8);
-	const u8 green = rgb_t::clamp((scaled_luminance - 100 * cb - 208 * cr + 128) >> 8);
-	const u8 blue = rgb_t::clamp((scaled_luminance + 516 * cb + 128) >> 8);
-	return rgb_t(red, green, blue);
+	const u32 luma = base + y * luma_pitch + x;
+	const u32 cb_plane = base + luma_bytes + (y / 2) * chroma_pitch;
+	const u32 cr_plane = cb_plane + chroma_bytes;
+
+	for (u32 column = 0; column != width; column++)
+	{
+		const int luminance = m_dram[(luma + column) & mask];
+		const u32 chroma_x = (x + column) / 2;
+		const int cb = m_dram[(cb_plane + chroma_x) & mask] - 128;
+		const int cr = m_dram[(cr_plane + chroma_x) & mask] - 128;
+		const int scaled_luminance = 298 * (luminance - 16);
+		const u8 red = rgb_t::clamp((scaled_luminance + 409 * cr + 128) >> 8);
+		const u8 green = rgb_t::clamp((scaled_luminance - 100 * cb - 208 * cr + 128) >> 8);
+		const u8 blue = rgb_t::clamp((scaled_luminance + 516 * cb + 128) >> 8);
+		destination[column] = rgb_t(red, green, blue);
+	}
 }
 
 void sti3400_device::queue_start_code(u64 position, u8 code)
