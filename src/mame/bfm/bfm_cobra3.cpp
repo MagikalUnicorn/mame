@@ -588,6 +588,7 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	m_sti3400->irq().set_inputline(m_maincpu, 6);
 
 	nscsi_bus_device &scsi(NSCSI_BUS(config, "scsi"));
+	// Phrase That Pays peaks near 418 KiB/s.
 	auto &cdrom(NSCSI_CDROM(config, "cdrom"));
 	scsi.set_external_device(2, cdrom);
 
