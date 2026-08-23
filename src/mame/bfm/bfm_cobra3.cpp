@@ -88,6 +88,7 @@ public:
 		m_sti3400(*this, "sti3400"),
 		m_strobein(*this, "STROBE%u", 0),
 		m_iostatus(*this, "IOSTATUS"),
+		m_initial_tube_fill(*this, "TUBE%u", 0U),
 		m_meters(*this, "meters"),
 		m_lamps(*this, "lamp%u", 0U),
 		m_coin_lockouts(*this, "coin_lockout%u", 0U),
@@ -96,7 +97,11 @@ public:
 	{ }
 
 	void bfm_cobra3(machine_config &config) ATTR_COLD;
+	void c3_telly(machine_config &config) ATTR_COLD;
 	int meter_sense_r();
+	int pound_tube_low_r();
+	int twenty_p_tube_low_r();
+	DECLARE_INPUT_CHANGED_MEMBER(coin_inserted);
 
 protected:
 	static constexpr unsigned NVRAM_BYTES = 16 * 1024;
@@ -114,6 +119,7 @@ protected:
 	required_device<sti3400_device> m_sti3400;
 	required_ioport_array<5> m_strobein;
 	required_ioport m_iostatus;
+	optional_ioport_array<2> m_initial_tube_fill;
 	required_device<meters_device> m_meters;
 	output_finder<24> m_lamps;
 	output_finder<5> m_coin_lockouts;
@@ -128,10 +134,15 @@ protected:
 	u16 m_lamp_latch;
 	u8 m_lamp_port_a;
 	u8 m_meter_latch;
+	u8 m_triac_latch;
+	u8 m_pound_tube_level;
+	u8 m_twenty_p_tube_level;
+	bool m_tube_levels_initialized;
 
 	virtual void machine_start() override ATTR_COLD;
-	virtual void cabinet_outputs_w(u16) { }
+	virtual void machine_reset() override ATTR_COLD;
 
+	void cabinet_outputs_w(u16 data);
 	void volume_control(bool direction, bool clock);
 	void set_coin_lockout(unsigned channel, bool state);
 	void lamp_latch_w(u16 data, u16 mem_mask);
@@ -149,32 +160,6 @@ protected:
 	void bfm_cobra3_map(address_map &map) ATTR_COLD;
 	void ramdac_map(address_map &map) ATTR_COLD;
 	void scc66470_map(address_map &map) ATTR_COLD;
-};
-
-class c3_telly_state : public bfm_cobra3_state
-{
-public:
-	c3_telly_state(const machine_config &mconfig, device_type type, const char *tag) :
-		bfm_cobra3_state(mconfig, type, tag),
-		m_initial_tube_fill(*this, "TUBE%u", 0U)
-	{ }
-
-	void c3_telly(machine_config &config) ATTR_COLD;
-	int pound_tube_low_r();
-	int twenty_p_tube_low_r();
-	DECLARE_INPUT_CHANGED_MEMBER(coin_inserted);
-
-protected:
-	virtual void machine_start() override ATTR_COLD;
-	virtual void machine_reset() override ATTR_COLD;
-	virtual void cabinet_outputs_w(u16 data) override;
-
-private:
-	required_ioport_array<2> m_initial_tube_fill;
-	u8 m_triac_latch;
-	u8 m_pound_tube_level;
-	u8 m_twenty_p_tube_level;
-	bool m_tube_levels_initialized;
 };
 
 void bfm_cobra3_state::update_lamps()
@@ -206,7 +191,7 @@ void bfm_cobra3_state::update_meters(u16 data)
 		m_meters->update(i, BIT(m_meter_latch, i));
 }
 
-void c3_telly_state::cabinet_outputs_w(u16 data)
+void bfm_cobra3_state::cabinet_outputs_w(u16 data)
 {
 	u8 const triacs = BIT(data, 4, 3);
 	u8 const rising = triacs & ~m_triac_latch;
@@ -270,17 +255,17 @@ int bfm_cobra3_state::meter_sense_r()
 	return 0;
 }
 
-int c3_telly_state::pound_tube_low_r()
+int bfm_cobra3_state::pound_tube_low_r()
 {
 	return m_pound_tube_level <= 13; // the level switch opens above £13
 }
 
-int c3_telly_state::twenty_p_tube_low_r()
+int bfm_cobra3_state::twenty_p_tube_low_r()
 {
 	return m_twenty_p_tube_level <= 23; // the level switch opens above £4.60
 }
 
-INPUT_CHANGED_MEMBER(c3_telly_state::coin_inserted)
+INPUT_CHANGED_MEMBER(bfm_cobra3_state::coin_inserted)
 {
 	if (!newval || !BIT(m_strobein[2]->read(), 2))
 		return;
@@ -508,15 +493,36 @@ static INPUT_PORTS_START( bfm_cobra3 )
 	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 INPUT_PORTS_END
 
-static INPUT_PORTS_START( c3_telly )
+static INPUT_PORTS_START( cobra3_payslide )
 	PORT_INCLUDE(bfm_cobra3)
 
 	PORT_MODIFY("IOSTATUS")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_COIN4 ) PORT_NAME("10p") PORT_IMPULSE(3)
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_COIN3 ) PORT_NAME("20p") PORT_IMPULSE(3) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(c3_telly_state::coin_inserted), 20)
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_COIN3 ) PORT_NAME("20p") PORT_IMPULSE(3) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(bfm_cobra3_state::coin_inserted), 20)
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_COIN2 ) PORT_NAME("50p") PORT_IMPULSE(3)
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_COIN1 ) PORT_NAME(u8"£1") PORT_IMPULSE(3) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(c3_telly_state::coin_inserted), 100)
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_COIN1 ) PORT_NAME(u8"£1") PORT_IMPULSE(3) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(bfm_cobra3_state::coin_inserted), 100)
 	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_UNUSED )
+
+	PORT_MODIFY("STROBE2")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(FUNC(bfm_cobra3_state::pound_tube_low_r))
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(FUNC(bfm_cobra3_state::twenty_p_tube_low_r))
+	PORT_CONFNAME( 0x04, 0x04, "Payout Unit" )
+	PORT_CONFSETTING(    0x00, "Not Fitted" )
+	PORT_CONFSETTING(    0x04, "Fitted" )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Cash Door Open") PORT_CODE(KEYCODE_Y) PORT_TOGGLE
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_DOOR ) PORT_NAME("Back and Front Doors Open") PORT_CODE(KEYCODE_T) PORT_TOGGLE
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_SERVICE ) PORT_NAME("Refill/Volume Setup Mode") PORT_CODE(KEYCODE_R) PORT_TOGGLE
+	PORT_BIT( 0xc0, IP_ACTIVE_HIGH, IPT_UNKNOWN )
+
+	PORT_START("TUBE0")
+	PORT_ADJUSTER(100, u8"Initial £1 Tube Fill")
+
+	PORT_START("TUBE1")
+	PORT_ADJUSTER(100, "Initial 20p Tube Fill")
+INPUT_PORTS_END
+
+static INPUT_PORTS_START( c3_telly )
+	PORT_INCLUDE(cobra3_payslide)
 
 	PORT_MODIFY("STROBE0")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("A (Left)") PORT_CODE(KEYCODE_A)
@@ -536,17 +542,6 @@ static INPUT_PORTS_START( c3_telly )
 	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("Select") PORT_CODE(KEYCODE_S)
 	PORT_BIT( 0xe0, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 
-	PORT_MODIFY("STROBE2")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(FUNC(c3_telly_state::pound_tube_low_r))
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(FUNC(c3_telly_state::twenty_p_tube_low_r))
-	PORT_CONFNAME( 0x04, 0x04, "Payout Unit" )
-	PORT_CONFSETTING(    0x00, "Not Fitted" )
-	PORT_CONFSETTING(    0x04, "Fitted" )
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Cash Door Open") PORT_CODE(KEYCODE_Y) PORT_TOGGLE
-	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_DOOR ) PORT_NAME("Back and Front Doors Open") PORT_CODE(KEYCODE_T) PORT_TOGGLE
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_SERVICE ) PORT_NAME("Refill/Volume Setup Mode") PORT_CODE(KEYCODE_R) PORT_TOGGLE
-	PORT_BIT( 0xc0, IP_ACTIVE_HIGH, IPT_UNKNOWN )
-
 	PORT_MODIFY("STROBE4")
 	PORT_DIPNAME( 0x01, 0x00, "Credit on Reset" ) PORT_DIPLOCATION("DIL:!01")
 	PORT_DIPSETTING(    0x00, "Retained" )
@@ -562,11 +557,6 @@ static INPUT_PORTS_START( c3_telly )
 	PORT_DIPSETTING(    0x80, "40%" )
 	PORT_DIPSETTING(    0xc0, "50%" )
 
-	PORT_START("TUBE0")
-	PORT_ADJUSTER(100, u8"Initial £1 Tube Fill")
-
-	PORT_START("TUBE1")
-	PORT_ADJUSTER(100, "Initial 20p Tube Fill")
 INPUT_PORTS_END
 
 
@@ -581,6 +571,10 @@ void bfm_cobra3_state::machine_start()
 	m_lamp_latch = 0;
 	m_lamp_port_a = 0;
 	m_meter_latch = 0;
+	m_triac_latch = 0;
+	m_pound_tube_level = 0;
+	m_twenty_p_tube_level = 0;
+	m_tube_levels_initialized = false;
 
 	save_item(NAME(m_active_strobe));
 	save_item(NAME(m_vol_clock));
@@ -588,27 +582,16 @@ void bfm_cobra3_state::machine_start()
 	save_item(NAME(m_lamp_latch));
 	save_item(NAME(m_lamp_port_a));
 	save_item(NAME(m_meter_latch));
-	machine().save().register_postload(save_prepost_delegate(FUNC(bfm_cobra3_state::update_lamps), this));
-}
-
-void c3_telly_state::machine_start()
-{
-	bfm_cobra3_state::machine_start();
-
-	m_triac_latch = 0;
-	m_pound_tube_level = 0;
-	m_twenty_p_tube_level = 0;
-	m_tube_levels_initialized = false;
-
 	save_item(NAME(m_triac_latch));
 	save_item(NAME(m_pound_tube_level));
 	save_item(NAME(m_twenty_p_tube_level));
 	save_item(NAME(m_tube_levels_initialized));
+	machine().save().register_postload(save_prepost_delegate(FUNC(bfm_cobra3_state::update_lamps), this));
 }
 
-void c3_telly_state::machine_reset()
+void bfm_cobra3_state::machine_reset()
 {
-	if (!m_tube_levels_initialized)
+	if (!m_tube_levels_initialized && m_initial_tube_fill[0].found() && m_initial_tube_fill[1].found())
 	{
 		m_pound_tube_level = (m_initial_tube_fill[0]->read() * 40 + 50) / 100; // £40 capacity in £1 coins
 		m_twenty_p_tube_level = (m_initial_tube_fill[1]->read() * 150 + 50) / 100; // £30 capacity in 20p coins
@@ -745,7 +728,7 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	METERS(config, m_meters).set_number(4);
 }
 
-void c3_telly_state::c3_telly(machine_config &config)
+void bfm_cobra3_state::c3_telly(machine_config &config)
 {
 	bfm_cobra3(config);
 
@@ -847,8 +830,8 @@ ROM_END
 
 } // anonymous namespace
 
-GAMEL( 1995, c3_telly,  0, c3_telly, c3_telly, c3_telly_state, empty_init, ROT0, "BFM", "Telly Addicts (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
-GAMEL( 1995, c3_tellyns, 0, c3_telly, c3_telly, c3_telly_state, empty_init, ROT0, "BFM", "Telly Addicts (New Series) (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
+GAMEL( 1995, c3_telly,  0, c3_telly, c3_telly, bfm_cobra3_state, empty_init, ROT0, "BFM", "Telly Addicts (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
+GAMEL( 1995, c3_tellyns, 0, c3_telly, c3_telly, bfm_cobra3_state, empty_init, ROT0, "BFM", "Telly Addicts (New Series) (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
 GAME( 1996, c3_rtime,  0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "Radio Times (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
 GAME( 1997, c3_totp,   0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "Top of the Pops (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
 GAME( 1998, c3_ppays,  0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "The Phrase That Pays (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
