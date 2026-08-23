@@ -306,9 +306,9 @@ u32 sti3400_device::video_pixel(u32 x, u32 y) const
 	const int cb = m_dram[(base + luma_bytes + (y / 2) * chroma_pitch + x / 2) & mask] - 128;
 	const int cr = m_dram[(base + luma_bytes + chroma_bytes + (y / 2) * chroma_pitch + x / 2) & mask] - 128;
 	const int scaled_luminance = 298 * (luminance - 16);
-	const u8 red = std::clamp((scaled_luminance + 409 * cr + 128) >> 8, 0, 255);
-	const u8 green = std::clamp((scaled_luminance - 100 * cb - 208 * cr + 128) >> 8, 0, 255);
-	const u8 blue = std::clamp((scaled_luminance + 516 * cb + 128) >> 8, 0, 255);
+	const u8 red = rgb_t::clamp((scaled_luminance + 409 * cr + 128) >> 8);
+	const u8 green = rgb_t::clamp((scaled_luminance - 100 * cb - 208 * cr + 128) >> 8);
+	const u8 blue = rgb_t::clamp((scaled_luminance + 516 * cb + 128) >> 8);
 	return rgb_t(red, green, blue);
 }
 

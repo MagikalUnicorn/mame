@@ -1202,7 +1202,7 @@ void mpeg_video::dct_coefficient(bool first, int &run, int &level)
 		}
 		else
 		{
-			level = (level_byte & 0x80) ? (level_byte - 256) : level_byte;
+			level = util::sext(level_byte, 8);
 		}
 		return;
 	}

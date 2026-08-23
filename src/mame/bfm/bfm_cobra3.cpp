@@ -145,8 +145,6 @@ protected:
 
 	u32 screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 
-	void scc66470_irq(int state);
-
 	void bfm_cobra3_map(address_map &map) ATTR_COLD;
 	void ramdac_map(address_map &map) ATTR_COLD;
 	void scc66470_map(address_map &map) ATTR_COLD;
@@ -210,7 +208,7 @@ void bfm_cobra3_state::update_meters(u16 data)
 
 void c3_telly_state::cabinet_outputs_w(u16 data)
 {
-	u8 const triacs = (data >> 4) & 0x07;
+	u8 const triacs = BIT(data, 4, 3);
 	u8 const rising = triacs & ~m_triac_latch;
 	m_triac_latch = triacs;
 
@@ -630,11 +628,6 @@ void c3_telly_state::machine_reset()
 }
 
 
-void bfm_cobra3_state::scc66470_irq(int state)
-{
-	m_maincpu->set_input_line(5, state);
-}
-
 u32 bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
 	bitmap.fill(0, cliprect);
@@ -738,7 +731,7 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	SCC66470(config, m_scc66470, 30_MHz_XTAL);
 	m_scc66470->set_addrmap(0, &bfm_cobra3_state::scc66470_map);
 	m_scc66470->set_screen("screen");
-	m_scc66470->irq().set(FUNC(bfm_cobra3_state::scc66470_irq));
+	m_scc66470->irq().set_inputline(m_maincpu, 5);
 
 	STI3400(config, m_sti3400, 0); // decoder clock and external-memory cycle timing are not modelled
 	m_sti3400->set_dram_size(1024 * 1024); // Cobra's buffer pointers cover a 1 MiB address space
