@@ -19,35 +19,9 @@
 
 DEFINE_DEVICE_TYPE(STI3400, sti3400_device, "sti3400", "SGS-Thomson STi3400 MPEG-1 Video Decoder")
 
-sti3400_device::sti3400_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock) :
-	device_t(mconfig, STI3400, tag, owner, clock),
-	m_irq_cb(*this),
-	m_dram_size(0),
-	m_decode_timer(nullptr),
-	m_fifo_write(0),
-	m_fifo_read(0),
-	m_decode_position(0),
-	m_start_code_shift(0),
-	m_event_head(0),
-	m_event_tail(0),
-	m_event_count(0),
-	m_interrupt_status(0),
-	m_status(0),
-	m_input_bytes(0),
-	m_input_bit_position(0),
-	m_display_pointer(0),
-	m_reconstructed_pointer(0),
-	m_forward_pointer(0),
-	m_backward_pointer(0),
-	m_width(0),
-	m_height(0),
-	m_decoded_width(0),
-	m_decoded_height(0),
-	m_frame_rate(FALLBACK_FRAME_RATE),
-	m_event_active(false),
-	m_irq_state(false),
-	m_task_active(false),
-	m_repeat_pending(false)
+sti3400_device::sti3400_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock)
+	: device_t(mconfig, STI3400, tag, owner, clock)
+	, m_irq_cb(*this)
 {
 }
 

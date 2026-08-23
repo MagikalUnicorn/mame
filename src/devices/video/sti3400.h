@@ -11,7 +11,7 @@
 class sti3400_device : public device_t
 {
 public:
-	sti3400_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock = 0);
+	sti3400_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock = 0) ATTR_COLD;
 
 	void set_dram_size(u32 bytes) { m_dram_size = bytes; }
 
@@ -26,9 +26,9 @@ public:
 	void video_line(u32 y, u32 x, u32 width, u32 *destination) const;
 
 protected:
-	virtual void device_start() override ATTR_COLD;
-	virtual void device_reset() override ATTR_COLD;
-	virtual void device_post_load() override ATTR_COLD;
+	void device_start() override ATTR_COLD;
+	void device_reset() override ATTR_COLD;
+	void device_post_load() override ATTR_COLD;
 
 private:
 	// STi3400 host-interface register addresses from the data sheet.
@@ -91,7 +91,21 @@ private:
 	// Used until an MPEG sequence header supplies the picture rate.
 	static constexpr u32 FALLBACK_FRAME_RATE = 25;
 
+	void reset_decoder();
+	void decoder_soft_reset();
+	bool execute_task();
+	TIMER_CALLBACK_MEMBER(decode_tick);
+
 	void stream_byte_w(u8 data);
+	void queue_start_code(u64 position, u8 code);
+	void activate_event();
+	void finish_event();
+	u16 bit_buffer_level() const;
+	u16 decoder_status() const;
+	void update_status();
+	void update_irq();
+	u8 stream_byte(u64 position) const;
+
 	u16 register_r(offs_t offset);
 	void register_w(offs_t offset, u16 data, u16 mem_mask = ~0);
 	void compressed_data_w(offs_t offset, u16 data, u16 mem_mask = ~0);
@@ -109,56 +123,51 @@ private:
 	void header_search_w(offs_t offset, u16 data, u16 mem_mask = ~0);
 	void bit_buffer_bottom_w(offs_t offset, u16 data, u16 mem_mask = ~0);
 	void bit_buffer_top_w(offs_t offset, u16 data, u16 mem_mask = ~0);
-	void reset_decoder();
-	void decoder_soft_reset();
-	bool execute_task();
-	TIMER_CALLBACK_MEMBER(decode_tick);
-	void queue_start_code(u64 position, u8 code);
-	void activate_event();
-	void finish_event();
-	u16 bit_buffer_level() const;
-	u16 decoder_status() const;
-	void update_status();
-	void update_irq();
-	u8 stream_byte(u64 position) const;
 
+	// Configuration and callbacks
 	devcb_write_line m_irq_cb;
-	u32 m_dram_size;
+	u32 m_dram_size = 0;
 
+	// Host interface
 	u16 m_registers[0x40];
+	u16 m_interrupt_status = 0;
+	u16 m_status = 0;
+	bool m_irq_state = false;
+
+	// Compressed-data FIFO and start-code queue
 	std::unique_ptr<u8[]> m_fifo;
 	u64 m_event_position[START_CODE_EVENT_COUNT];
 	u8 m_event_code[START_CODE_EVENT_COUNT];
-	emu_timer *m_decode_timer;
+	u64 m_fifo_write = 0;
+	u64 m_fifo_read = 0;
+	u32 m_start_code_shift = 0;
+	u16 m_event_head = 0;
+	u16 m_event_tail = 0;
+	u16 m_event_count = 0;
+	bool m_event_active = false;
+
+	// Decoder input and scheduling
+	emu_timer *m_decode_timer = nullptr;
 	std::unique_ptr<u8[]> m_input;
+	std::unique_ptr<mpeg_video> m_decoder;
+	u64 m_decode_position = 0;
+	u32 m_input_bytes = 0;
+	u32 m_input_bit_position = 0;
+	u16 m_decoded_width = 0;
+	u16 m_decoded_height = 0;
+	double m_frame_rate = FALLBACK_FRAME_RATE;
+	bool m_task_active = false;
+	bool m_repeat_pending = false;
+
+	// Picture DRAM and video output
 	std::unique_ptr<u8[]> m_dram;
 	std::unique_ptr<u8[]> m_picture_valid;
-	std::unique_ptr<mpeg_video> m_decoder;
-
-	u64 m_fifo_write;
-	u64 m_fifo_read;
-	u64 m_decode_position;
-	u32 m_start_code_shift;
-	u16 m_event_head;
-	u16 m_event_tail;
-	u16 m_event_count;
-	u16 m_interrupt_status;
-	u16 m_status;
-	u32 m_input_bytes;
-	u32 m_input_bit_position;
-	u16 m_display_pointer;
-	u16 m_reconstructed_pointer;
-	u16 m_forward_pointer;
-	u16 m_backward_pointer;
-	u16 m_width;
-	u16 m_height;
-	u16 m_decoded_width;
-	u16 m_decoded_height;
-	double m_frame_rate;
-	bool m_event_active;
-	bool m_irq_state;
-	bool m_task_active;
-	bool m_repeat_pending;
+	u16 m_display_pointer = 0;
+	u16 m_reconstructed_pointer = 0;
+	u16 m_forward_pointer = 0;
+	u16 m_backward_pointer = 0;
+	u16 m_width = 0;
+	u16 m_height = 0;
 };
 
 DECLARE_DEVICE_TYPE(STI3400, sti3400_device)
