@@ -63,6 +63,7 @@ private:
 	static constexpr u16 CTL_DVS = 0x0080; // disable VSYNC-triggered task start
 	static constexpr u16 INS_RPT = 0x0002; // repeat picture for a second VSYNC period
 	static constexpr u16 INS_WAIT = 0x0004; // inhibit DSYNC, decoding and header search
+	static constexpr u16 INS_OVW = 0x8000; // reconstruct into the displayed picture buffer
 
 	// Bit-buffer levels and thresholds are 14-bit counts of 256-byte units.
 	static constexpr u16 BIT_BUFFER_LEVEL_MASK = 0x3fff;
@@ -162,6 +163,7 @@ private:
 
 	// Picture DRAM and video output
 	std::unique_ptr<u8[]> m_dram;
+	std::unique_ptr<u8[]> m_overwrite_display;
 	std::unique_ptr<u8[]> m_picture_valid;
 	u16 m_display_pointer = 0;
 	u16 m_reconstructed_pointer = 0;
@@ -169,6 +171,7 @@ private:
 	u16 m_backward_pointer = 0;
 	u16 m_width = 0;
 	u16 m_height = 0;
+	bool m_overwrite_display_active = false;
 };
 
 DECLARE_DEVICE_TYPE(STI3400, sti3400_device)

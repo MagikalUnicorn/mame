@@ -34,6 +34,7 @@ void sti3400_device::device_start()
 	m_fifo = std::make_unique<u8[]>(COMPRESSED_DATA_BUFFER_BYTES);
 	m_input = std::make_unique<u8[]>(COMPRESSED_DATA_BUFFER_BYTES);
 	m_dram = std::make_unique<u8[]>(m_dram_size);
+	m_overwrite_display = std::make_unique<u8[]>(m_dram_size);
 	m_picture_valid = std::make_unique<u8[]>(m_dram_size / BIT_BUFFER_LEVEL_UNIT_BYTES);
 	m_decoder = std::make_unique<mpeg_video>(m_input.get(), MAX_VIDEO_WIDTH, MAX_VIDEO_HEIGHT);
 	m_decoder->register_save_state(*this);
@@ -53,6 +54,7 @@ void sti3400_device::device_start()
 	save_item(NAME(m_event_active));
 	save_pointer(NAME(m_input), COMPRESSED_DATA_BUFFER_BYTES);
 	save_pointer(NAME(m_dram), m_dram_size);
+	save_pointer(NAME(m_overwrite_display), m_dram_size);
 	save_pointer(NAME(m_picture_valid), m_dram_size / BIT_BUFFER_LEVEL_UNIT_BYTES);
 	save_item(NAME(m_input_bytes));
 	save_item(NAME(m_input_bit_position));
@@ -67,6 +69,7 @@ void sti3400_device::device_start()
 	save_item(NAME(m_frame_rate));
 	save_item(NAME(m_task_active));
 	save_item(NAME(m_repeat_pending));
+	save_item(NAME(m_overwrite_display_active));
 }
 
 void sti3400_device::device_reset()
@@ -110,6 +113,7 @@ void sti3400_device::reset_decoder()
 	m_frame_rate = FALLBACK_FRAME_RATE;
 	m_task_active = false;
 	m_repeat_pending = false;
+	m_overwrite_display_active = false;
 	m_decoder->clear();
 	m_decode_timer->adjust(attotime::never);
 }
@@ -191,6 +195,8 @@ void sti3400_device::vblank_w(int state)
 	if (!state)
 		return;
 
+	m_overwrite_display_active = false;
+
 	// DFP is double-buffered by the hardware and becomes active at VSYNC.
 	m_display_pointer = m_registers[REG_DFP] & PICTURE_POINTER_MASK;
 	m_width = m_decoded_width;
@@ -207,6 +213,13 @@ void sti3400_device::vblank_w(int state)
 		m_reconstructed_pointer = m_registers[REG_RFP] & PICTURE_POINTER_MASK;
 		m_forward_pointer = m_registers[REG_FFP] & PICTURE_POINTER_MASK;
 		m_backward_pointer = m_registers[REG_BFP] & PICTURE_POINTER_MASK;
+		if ((m_registers[REG_INS] & INS_OVW) && (m_reconstructed_pointer == m_display_pointer))
+		{
+			// The hardware keeps reconstruction behind the display scan in overwrite mode.
+			// Preserve the current field because MAME renders it as a single operation.
+			std::copy_n(m_dram.get(), m_dram_size, m_overwrite_display.get());
+			m_overwrite_display_active = true;
+		}
 		m_task_active = true;
 		m_repeat_pending = bool(m_registers[REG_INS] & INS_RPT);
 		finish_event();
@@ -284,13 +297,14 @@ void sti3400_device::video_line(u32 y, u32 x, u32 width, u32 *destination) const
 	const u32 luma = base + y * luma_pitch + x;
 	const u32 cb_plane = base + luma_bytes + (y / 2) * chroma_pitch;
 	const u32 cr_plane = cb_plane + chroma_bytes;
+	const u8 *const picture = m_overwrite_display_active ? m_overwrite_display.get() : m_dram.get();
 
 	for (u32 column = 0; column != width; column++)
 	{
-		const int luminance = m_dram[(luma + column) & mask];
+		const int luminance = picture[(luma + column) & mask];
 		const u32 chroma_x = (x + column) / 2;
-		const int cb = m_dram[(cb_plane + chroma_x) & mask] - 128;
-		const int cr = m_dram[(cr_plane + chroma_x) & mask] - 128;
+		const int cb = picture[(cb_plane + chroma_x) & mask] - 128;
+		const int cr = picture[(cr_plane + chroma_x) & mask] - 128;
 		const int scaled_luminance = 298 * (luminance - 16);
 		const u8 red = rgb_t::clamp((scaled_luminance + 409 * cr + 128) >> 8);
 		const u8 green = rgb_t::clamp((scaled_luminance - 100 * cb - 208 * cr + 128) >> 8);
