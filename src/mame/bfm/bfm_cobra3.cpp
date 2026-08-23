@@ -41,8 +41,6 @@
      Doors and allow the alarm delay to expire to clear it.
 */
 
-
-
 #include "emu.h"
 
 #include "bus/nscsi/cd.h"
@@ -66,6 +64,11 @@
 
 #include "c3_telly.lh"
 
+#define LOG_UNKNOWN (1U << 1)
+
+#define VERBOSE (0)
+#include "logmacro.h"
+
 namespace {
 
 class bfm_cobra3_state : public driver_device
@@ -75,9 +78,10 @@ public:
 		driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
 		m_cpuregion(*this, "maincpu"),
-		m_nvram(*this, "nvram"),
+		m_mainram(*this, "nvram", NVRAM_BYTES, ENDIANNESS_BIG),
 		m_av110(*this, "av110"),
 		m_ymz(*this, "ymz280b"),
+		m_screen(*this, "screen"),
 		m_palette(*this, "palette"),
 		m_ramdac(*this, "ramdac"),
 		m_scc66470(*this, "scc66470"),
@@ -87,7 +91,6 @@ public:
 		m_meters(*this, "meters"),
 		m_lamps(*this, "lamp%u", 0U),
 		m_coin_lockouts(*this, "coin_lockout%u", 0U),
-		m_scsibus(*this, "scsi"),
 		m_scsic(*this, "ncr5380"),
 		m_watchdog(*this, "watchdog")
 	{ }
@@ -96,12 +99,15 @@ public:
 	int meter_sense_r();
 
 protected:
-	// devices
+	static constexpr unsigned NVRAM_BYTES = 16 * 1024;
+
+	// devices and memory
 	required_device<m68340_cpu_device> m_maincpu;
-	required_region_ptr<uint16_t> m_cpuregion;
-	required_device<nvram_device> m_nvram;
+	required_region_ptr<u16> m_cpuregion;
+	memory_share_creator<u16> m_mainram;
 	required_device<tms320av110_device> m_av110;
 	required_device<ymz280b_device> m_ymz;
+	required_device<screen_device> m_screen;
 	required_device<palette_device> m_palette;
 	required_device<ramdac_device> m_ramdac;
 	required_device<scc66470_device> m_scc66470;
@@ -111,33 +117,33 @@ protected:
 	required_device<meters_device> m_meters;
 	output_finder<24> m_lamps;
 	output_finder<5> m_coin_lockouts;
-	required_device<nscsi_bus_device> m_scsibus;
 	required_device<ncr5380_device> m_scsic;
 	required_device<watchdog_timer_device> m_watchdog;
+	std::unique_ptr<u8[]> m_scc_line_buffer;
 
-	std::unique_ptr<uint16_t[]> m_mainram;
-
-	uint8_t m_active_strobe;
-	uint8_t m_vol_clock;
-	uint8_t m_volume;
-	uint16_t m_lamp_latch;
-	uint8_t m_lamp_port_a;
-	uint8_t m_meter_latch;
+	u8 m_active_strobe;
+	bool m_vol_clock;
+	u8 m_volume;
+	u16 m_lamp_latch;
+	u8 m_lamp_port_a;
+	u8 m_meter_latch;
 
 	virtual void machine_start() override ATTR_COLD;
-	virtual void update_meters(uint16_t data);
-	virtual void cabinet_outputs_w(uint16_t) { }
+	virtual void cabinet_outputs_w(u16) { }
 
-	void volume_control(uint8_t direction, uint8_t clock);
+	void volume_control(bool direction, bool clock);
 	void set_coin_lockout(unsigned channel, bool state);
-	void lamp_latch_w(uint16_t data, uint16_t mem_mask);
-	void lamp_port_a_w(uint8_t data);
+	void lamp_latch_w(u16 data, u16 mem_mask);
+	void lamp_port_a_w(u8 data);
 	void update_lamps();
+	void update_meters(u16 data);
 	void av110_reset_strobe_w(u8 data);
-	uint16_t mem_r(offs_t offset, uint16_t mem_mask = ~0);
-	void mem_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	u16 io_r(offs_t offset, u16 mem_mask);
+	void io_w(offs_t offset, u16 data, u16 mem_mask);
+	u16 mem_r(offs_t offset, u16 mem_mask = ~0);
+	void mem_w(offs_t offset, u16 data, u16 mem_mask = ~0);
 
-	uint32_t screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
+	u32 screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 
 	void scc66470_irq(int state);
 
@@ -163,13 +169,13 @@ public:
 protected:
 	virtual void machine_start() override ATTR_COLD;
 	virtual void machine_reset() override ATTR_COLD;
-	virtual void cabinet_outputs_w(uint16_t data) override;
+	virtual void cabinet_outputs_w(u16 data) override;
 
 private:
 	required_ioport_array<2> m_initial_tube_fill;
-	uint8_t m_triac_latch;
-	uint16_t m_pound_tube_level;
-	uint16_t m_twenty_p_tube_level;
+	u8 m_triac_latch;
+	u8 m_pound_tube_level;
+	u8 m_twenty_p_tube_level;
 	bool m_tube_levels_initialized;
 };
 
@@ -182,19 +188,19 @@ void bfm_cobra3_state::update_lamps()
 		m_lamps[16 + i] = BIT(m_lamp_port_a, i);
 }
 
-void bfm_cobra3_state::lamp_latch_w(uint16_t data, uint16_t mem_mask)
+void bfm_cobra3_state::lamp_latch_w(u16 data, u16 mem_mask)
 {
 	COMBINE_DATA(&m_lamp_latch);
 	update_lamps();
 }
 
-void bfm_cobra3_state::lamp_port_a_w(uint8_t data)
+void bfm_cobra3_state::lamp_port_a_w(u8 data)
 {
 	m_lamp_port_a = data;
 	update_lamps();
 }
 
-void bfm_cobra3_state::update_meters(uint16_t data)
+void bfm_cobra3_state::update_meters(u16 data)
 {
 	m_meter_latch = data & 0x0f;
 
@@ -202,10 +208,10 @@ void bfm_cobra3_state::update_meters(uint16_t data)
 		m_meters->update(i, BIT(m_meter_latch, i));
 }
 
-void c3_telly_state::cabinet_outputs_w(uint16_t data)
+void c3_telly_state::cabinet_outputs_w(u16 data)
 {
-	uint8_t const triacs = (data >> 4) & 0x07;
-	uint8_t const rising = triacs & ~m_triac_latch;
+	u8 const triacs = (data >> 4) & 0x07;
+	u8 const rising = triacs & ~m_triac_latch;
 	m_triac_latch = triacs;
 
 	if (!BIT(m_strobein[2]->read(), 2))
@@ -217,34 +223,29 @@ void c3_telly_state::cabinet_outputs_w(uint16_t data)
 		m_pound_tube_level--;
 }
 
-void bfm_cobra3_state::volume_control(uint8_t direction, uint8_t clock)
+void bfm_cobra3_state::volume_control(bool direction, bool clock)
 {
-	uint8_t const clock_changed = m_vol_clock ^ clock;
-
+	bool const falling_edge = m_vol_clock && !clock;
 	m_vol_clock = clock;
-	if (clock_changed)
-	{ // digital volume clock line changed
-		if (!clock)
-		{ // changed from high to low,
-			if (!direction)
-			{
-				if (m_volume < 31)
-					m_volume++; //0-31 expressed as 1-32
-			}
-			else
-			{
-				if (m_volume > 0)
-					m_volume--;
-			}
+	if (!falling_edge)
+		return;
 
-			float const fraction = (32 - m_volume) / 32.0f;
-
-			m_ymz->set_output_gain(0, fraction);
-			m_ymz->set_output_gain(1, fraction);
-			m_av110->set_output_gain(0, fraction);
-			m_av110->set_output_gain(1, fraction);
-		}
+	if (!direction)
+	{
+		if (m_volume < 31)
+			m_volume++;
 	}
+	else if (m_volume)
+	{
+		m_volume--;
+	}
+
+	float const fraction = (32 - m_volume) / 32.0f;
+
+	m_ymz->set_output_gain(0, fraction);
+	m_ymz->set_output_gain(1, fraction);
+	m_av110->set_output_gain(0, fraction);
+	m_av110->set_output_gain(1, fraction);
 }
 
 void bfm_cobra3_state::set_coin_lockout(unsigned channel, bool state)
@@ -303,178 +304,171 @@ INPUT_CHANGED_MEMBER(c3_telly_state::coin_inserted)
 		m_twenty_p_tube_level++;
 }
 
-uint16_t bfm_cobra3_state::mem_r(offs_t offset, uint16_t mem_mask)
+u16 bfm_cobra3_state::io_r(offs_t offset, u16 mem_mask)
 {
-	int cs = m_maincpu->get_cs(offset * 2);
+	offset &= 0x7ff;
+
+	switch ((offset * 2) & 0xf00)
+	{
+		case 0x300: // YMZ stereo sound accesses
+			if (ACCESSING_BITS_0_7)
+			{
+				return m_ymz->read(offset & 1);
+			}
+			break;
+
+		case 0x400:
+			return (m_strobein[m_active_strobe]->read() << 8) | m_iostatus->read();
+
+		case 0x500: // SCSI DMA
+			if (ACCESSING_BITS_8_15)
+			{
+				return m_scsic->dma_r() << 8;
+			}
+			break;
+
+		case 0x600: // RAMDAC palette read
+			if (ACCESSING_BITS_0_7 && ((offset & 7) == 1))
+				return m_ramdac->pal_r();
+			break;
+
+		default:
+			LOGMASKED(LOG_UNKNOWN, "%s: unknown I/O read offset %08x mask %04x\n", machine().describe_context(), offset * 2, mem_mask);
+			break;
+	}
+
+	return 0;
+}
+
+void bfm_cobra3_state::io_w(offs_t offset, u16 data, u16 mem_mask)
+{
+	offset &= 0x7ff;
+
+	switch ((offset * 2) & 0xf00)
+	{
+		case 0x000:
+			lamp_latch_w(data, mem_mask);
+			break;
+
+		case 0x100:
+			if (ACCESSING_BITS_8_15)
+			{
+				u8 const enables = data >> 8;
+				set_coin_lockout(0, !BIT(enables, 3)); // £1
+				set_coin_lockout(1, !BIT(enables, 2)); // 50p
+				set_coin_lockout(2, !BIT(enables, 1)); // 20p
+				set_coin_lockout(3, !BIT(enables, 0)); // 10p
+				set_coin_lockout(4, !BIT(enables, 4)); // fifth validator channel
+			}
+			break;
+
+		case 0x200:
+			update_meters(data);
+			cabinet_outputs_w(data);
+			volume_control(BIT(data, 7), BIT(data, 15));
+			m_watchdog->reset_line_w(BIT(data, 8));
+
+			for (unsigned i = 0; i < 5; i++)
+			{
+				if (BIT(data, i + 10))
+					m_active_strobe = i;
+			}
+			break;
+
+		case 0x300:
+			if (ACCESSING_BITS_0_7)
+				m_ymz->write(offset & 1, data);
+			break;
+
+		case 0x500: // SCSI DMA
+			if (ACCESSING_BITS_8_15)
+				m_scsic->dma_w(data >> 8);
+			break;
+
+		case 0x700: // RAMDAC palette write
+			if (ACCESSING_BITS_0_7)
+			{
+				switch (offset & 7)
+				{
+					case 0:
+						m_ramdac->index_w(data);
+						break;
+
+					case 1:
+						m_ramdac->pal_w(data);
+						break;
+
+					case 2:
+						m_ramdac->mask_w(data);
+						break;
+
+					case 3:
+						m_ramdac->index_r_w(data);
+						break;
+				}
+			}
+			break;
+
+		default:
+			// The Phrase That Pays uses the 0x900 and 0xa00 blocks for unimplemented coin-handling outputs.
+			LOGMASKED(LOG_UNKNOWN, "%s: unknown I/O write offset %08x data %04x mask %04x\n", machine().describe_context(), offset * 2, data, mem_mask);
+			break;
+	}
+}
+
+u16 bfm_cobra3_state::mem_r(offs_t offset, u16 mem_mask)
+{
+	u16 const cs = m_maincpu->get_cs(offset * 2);
 
 	switch (cs)
 	{
 		case 1: // ROM
 			return m_cpuregion[offset & 0x7ffff];
-		case 2:// (NV)RAM
-			return m_mainram[offset & 0x1fff];
+
+		case 2: // NVRAM
+			return m_mainram[offset & (m_mainram.length() - 1)];
 
 		case 3: // I/O
-			{
-				offset &= 0x7ff;
-				offs_t cs_addr_8_11 = (offset * 2) & 0xf00;
-
-				switch (cs_addr_8_11)
-				{
-					case 0x300: //YMZ stereo sound accesses
-						if (ACCESSING_BITS_0_7)
-						{
-							return m_ymz->read(offset & 1);
-						}
-						break;
-
-					case 0x400:
-						{
-							return (m_strobein[m_active_strobe]->read() << 8) | m_iostatus->read();
-						}
-					case 0x500: //SCSI DMA
-						if (ACCESSING_BITS_8_15)
-						{
-							return m_scsic->dma_r() << 8;
-						}
-						break;
-
-					case 0x600: //Looks like the RAMDAC hookup
-						if (ACCESSING_BITS_0_7)
-						{
-							if ((offset & 7) == 1)
-							{
-								return m_ramdac->pal_r();
-							}
-						}
-						break;
-
-					default:
-						logerror("%s maincpu read access offset %08x mem_mask %08x cs %d\n", machine().describe_context(), offset * 2, mem_mask, cs);
-						break;
-				}
-			}
-			break;
+			return io_r(offset, mem_mask);
 
 		case 4: // SCSI controller
 			if (ACCESSING_BITS_8_15)
-			{
 				return m_scsic->read(offset & 0x0f) << 8;
-			}
 			break;
 
 		default:
-			logerror("%s maincpu read access offset %08x mem_mask %08x cs %d\n", machine().describe_context(), offset * 2, mem_mask, cs);
+			LOGMASKED(LOG_UNKNOWN, "%s: unknown read offset %08x mask %04x CS%d\n", machine().describe_context(), offset * 2, mem_mask, cs);
+			break;
 	}
 
-	return 0x0000;
+	return 0;
 }
 
-void bfm_cobra3_state::mem_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+void bfm_cobra3_state::mem_w(offs_t offset, u16 data, u16 mem_mask)
 {
-	int cs = m_maincpu->get_cs(offset * 2);
+	u16 const cs = m_maincpu->get_cs(offset * 2);
 
 	switch (cs)
 	{
-		case 1:// ROM, shouldn't write here?
-			logerror("%s maincpu write access(1) offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset * 2, data, mem_mask, cs);
+		case 1: // ROM
+			LOGMASKED(LOG_UNKNOWN, "%s: write to ROM offset %08x data %04x mask %04x\n", machine().describe_context(), offset * 2, data, mem_mask);
 			break;
 
-		case 2:// (NV)RAM
-			COMBINE_DATA(&m_mainram[offset & 0x1fff]);
+		case 2: // NVRAM
+			COMBINE_DATA(&m_mainram[offset & (m_mainram.length() - 1)]);
 			break;
 
 		case 3: // I/O
-			{
-				offset &= 0x7ff;
-				offs_t cs_addr_8_11 = (offset * 2) & 0xf00;
-				switch (cs_addr_8_11)
-				{
-					case 0x000:
-						lamp_latch_w(data, mem_mask);
-						break;
-
-					case 0x100:
-						if (ACCESSING_BITS_8_15)
-						{
-							uint8_t const enables = data >> 8;
-							set_coin_lockout(0, !BIT(enables, 3)); // £1
-							set_coin_lockout(1, !BIT(enables, 2)); // 50p
-							set_coin_lockout(2, !BIT(enables, 1)); // 20p
-							set_coin_lockout(3, !BIT(enables, 0)); // 10p
-							set_coin_lockout(4, !BIT(enables, 4)); // fifth validator channel
-						}
-						break;
-
-					case 0x200:
-						update_meters(data);
-						cabinet_outputs_w(data);
-						volume_control(BIT(data,7), BIT(data,15));
-						m_watchdog->reset_line_w(BIT(data , 8));
-
-						for (int i=10; i<15; i++)
-						{
-							if (BIT(data, i))
-							{
-								m_active_strobe = i - 10;
-							}
-						}
-						break;
-
-					case 0x300:
-						if (ACCESSING_BITS_0_7)
-						{
-							m_ymz->write(offset & 1, data);
-						}
-						break;
-
-					case 0x500: // SCSI DMA
-						if (ACCESSING_BITS_8_15)
-						{
-							m_scsic->dma_w(data >> 8);
-						}
-						break;
-
-					case 0x700: // RAMDAC for palettes
-						if (ACCESSING_BITS_0_7)
-						{
-							offset &= 7;
-							switch (offset)
-							{
-							case 0:
-								m_ramdac->index_w(data);
-								break;
-							case 1:
-								m_ramdac->pal_w(data);
-								break;
-							case 2:
-								m_ramdac->mask_w(data);
-								break;
-							case 3:
-								m_ramdac->index_r_w(data);
-								break;
-							}
-						}
-						break;
-
-					default:
-						// The Phrase That Pays uses the 0x900 and 0xa00 blocks for unimplemented coin-handling outputs.
-						logerror("%s maincpu write access(3) offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset * 2, data, mem_mask, cs);
-						break;
-				}
-			}
+			io_w(offset, data, mem_mask);
 			break;
 
 		case 4: // SCSI controller
-			offset &= 0x0f;
 			if (ACCESSING_BITS_8_15)
-			{
-				m_scsic->write(offset, data >> 8);
-			}
+				m_scsic->write(offset & 0x0f, data >> 8);
 			break;
 
 		default:
-			logerror("%s maincpu write access(0) offset %08x data %08x mem_mask %08x cs %d\n", machine().describe_context(), offset * 2, data, mem_mask, cs);
+			LOGMASKED(LOG_UNKNOWN, "%s: unknown write offset %08x data %04x mask %04x CS%d\n", machine().describe_context(), offset * 2, data, mem_mask, cs);
 			break;
 	}
 }
@@ -592,15 +586,14 @@ INPUT_PORTS_END
 
 void bfm_cobra3_state::machine_start()
 {
+	m_scc_line_buffer = std::make_unique<u8[]>(m_screen->visible_area().width());
+
 	m_active_strobe = 0;
 	m_vol_clock = 0;
 	m_volume = 0;
 	m_lamp_latch = 0;
 	m_lamp_port_a = 0;
 	m_meter_latch = 0;
-	m_mainram = make_unique_clear<uint16_t[]>((1024 * 16) / 2);
-	m_nvram->set_base(m_mainram.get(), 1024 * 16);
-	save_pointer(NAME(m_mainram), (1024 * 16) / 2);
 
 	save_item(NAME(m_active_strobe));
 	save_item(NAME(m_vol_clock));
@@ -642,72 +635,62 @@ void bfm_cobra3_state::scc66470_irq(int state)
 	m_maincpu->set_input_line(5, state);
 }
 
-uint32_t bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+u32 bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	if (cliprect.min_y == cliprect.max_y)
+	bitmap.fill(0, cliprect);
+
+	rectangle const &visible = screen.visible_area();
+
+	if (m_sti3400->video_valid())
 	{
-		uint32_t *const line = &bitmap.pix(cliprect.min_y);
-		std::fill_n(line, 768, 0);
-
-		if (m_sti3400->video_valid())
+		int const source_width = m_sti3400->video_width();
+		int const source_height = m_sti3400->video_height();
+		if (source_width && source_height)
 		{
-			// Cobra MPEG pictures are 352x288; centre-crop them to the 280-line display area.
-			const unsigned source_y = std::min<unsigned>(
-				cliprect.min_y - 32 + 4,
-				m_sti3400->video_height() - 1);
+			rectangle video(visible);
+			video.set_size(std::min(source_width * 2, visible.width()), std::min(source_height, visible.height()));
+			video.set_origin(visible.left() + (visible.width() - video.width()) / 2, visible.top() + (visible.height() - video.height()) / 2);
 
-			for (unsigned x = 0; x < 352; x++)
+			rectangle const draw = video & cliprect;
+			for (int y = draw.top(); y <= draw.bottom(); y++)
 			{
-				const unsigned source_x = (x * m_sti3400->video_width()) / 352;
-				const u32 pixel = m_sti3400->video_pixel(source_x, source_y);
-				line[32 + (x * 2) + 0] = pixel;
-				line[32 + (x * 2) + 1] = pixel;
-			}
-		}
-
-		if (m_scc66470->display_enabled())
-		{
-			uint32_t *dest = line;
-			uint8_t buffer[768];
-			uint8_t *src = buffer;
-			m_scc66470->line(cliprect.min_y, buffer, sizeof(buffer));
-
-			if (*src != 254)
-				dest = std::fill_n(dest, 32, m_palette->pen(*src));
-			else
-				dest += 32;
-			src += 32;
-
-			for (int x = 0 ; x < 352 ; x++)
-			{
-				if (*src != 254)
-					*dest++ = m_palette->pen(*src++);
-				else
+				u32 *const line = &bitmap.pix(y);
+				int const source_y = (source_height - video.height()) / 2 + y - video.top();
+				for (int x = draw.left(); x <= draw.right(); x++)
 				{
-					dest++;
-					src++;
-				}
-
-				if (*src != 254)
-					*dest++ = m_palette->pen(*src++);
-				else
-				{
-					dest++;
-					src++;
+					// SCC66470 8-bit output repeats each stored pixel twice horizontally.
+					int const source_x = ((source_width * 2 - video.width()) / 2 + x - video.left()) / 2;
+					line[x] = m_sti3400->video_pixel(source_x, source_y);
 				}
 			}
-
-			if (*src != 254)
-				std::fill_n(dest, 32, m_palette->pen(*src));
 		}
 	}
+
+	if (m_scc66470->display_enabled())
+	{
+		rectangle const draw = visible & cliprect;
+		for (int y = draw.top(); y <= draw.bottom(); y++)
+		{
+			u32 *const line = &bitmap.pix(y);
+			m_scc66470->line(y, m_scc_line_buffer.get(), visible.width());
+
+			for (int x = draw.left(); x <= draw.right(); x++)
+			{
+				u8 const pen = m_scc_line_buffer[x - visible.left()];
+				// The Cobra mixer selects external MPEG video for palette index 0xfe.
+				if (pen != 0xfe)
+					line[x] = m_palette->pen(pen);
+			}
+		}
+	}
+
 	return 0;
 }
 
 
 void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 {
-	M68340(config, m_maincpu, 16000000);
+	M68340(config, m_maincpu, 16'000'000); // TODO: verify clock source and frequency
 	m_maincpu->set_addrmap(AS_PROGRAM, &bfm_cobra3_state::bfm_cobra3_map);
 	m_maincpu->pa_out_callback().set(FUNC(bfm_cobra3_state::lamp_port_a_w));
 	mc68340_serial_module_device &serial(*m_maincpu->subdevice<mc68340_serial_module_device>("serial"));
@@ -724,7 +707,9 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	NVRAM(config, "nvram", nvram_device::DEFAULT_ALL_0);
 
 	screen_device &screen(SCREEN(config, "screen"));
-	screen.set_raw(15000000, 960, 0, 768, 312, 32, 312);
+	// The SCC66470 produces a pixel clock at half its oscillator frequency.
+	// Cobra uses its 768-pixel, 280-visible-line mode in a 312-line field.
+	screen.set_raw(30_MHz_XTAL / 2, 960, 0, 768, 312, 32, 312);
 	screen.set_video_attributes(VIDEO_UPDATE_SCANLINE);
 	screen.set_screen_update(FUNC(bfm_cobra3_state::screen_update));
 	screen.screen_vblank().set(m_sti3400, FUNC(sti3400_device::vblank_w));
@@ -750,7 +735,7 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	m_av110->add_route(0, "lspeaker", 1.0);
 	m_av110->add_route(1, "rspeaker", 1.0);
 
-	SCC66470(config,m_scc66470,30000000);
+	SCC66470(config, m_scc66470, 30_MHz_XTAL);
 	m_scc66470->set_addrmap(0, &bfm_cobra3_state::scc66470_map);
 	m_scc66470->set_screen("screen");
 	m_scc66470->irq().set(FUNC(bfm_cobra3_state::scc66470_irq));
@@ -759,7 +744,7 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	m_sti3400->set_dram_size(1024 * 1024); // Cobra's buffer pointers cover a 1 MiB address space
 	m_sti3400->irq().set_inputline(m_maincpu, 6);
 
-	auto &scsi(NSCSI_BUS(config, m_scsibus));
+	nscsi_bus_device &scsi(NSCSI_BUS(config, "scsi"));
 	// TODO: Verify the original drive speed; 2x was contemporary and is more realistic than the
 	// roughly 9,742 KB/s reported by Cobra diagnostics with the untimed device.
 	auto &cdrom(NSCSI_CDROM_2X(config, "cdrom"));
@@ -878,7 +863,7 @@ ROM_END
 } // anonymous namespace
 
 GAMEL( 1995, c3_telly,  0, c3_telly, c3_telly, c3_telly_state, empty_init, ROT0, "BFM", "Telly Addicts (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
-GAMEL( 1995, c3_tellyns,0, c3_telly, c3_telly, c3_telly_state, empty_init, ROT0, "BFM", "Telly Addicts (New Series) (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
-GAME( 1996, c3_rtime,  0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "Radio Times (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS| MACHINE_NOT_WORKING )
+GAMEL( 1995, c3_tellyns, 0, c3_telly, c3_telly, c3_telly_state, empty_init, ROT0, "BFM", "Telly Addicts (New Series) (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
+GAME( 1996, c3_rtime,  0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "Radio Times (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
 GAME( 1997, c3_totp,   0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "Top of the Pops (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
 GAME( 1998, c3_ppays,  0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "The Phrase That Pays (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
