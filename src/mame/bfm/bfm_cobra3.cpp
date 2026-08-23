@@ -75,84 +75,33 @@ namespace {
 class bfm_cobra3_state : public driver_device
 {
 public:
-	bfm_cobra3_state(const machine_config &mconfig, device_type type, const char *tag) :
-		driver_device(mconfig, type, tag),
-		m_maincpu(*this, "maincpu"),
-		m_cpuregion(*this, "maincpu"),
-		m_mainram(*this, "nvram", NVRAM_BYTES, ENDIANNESS_BIG),
-		m_av110(*this, "av110"),
-		m_ymz(*this, "ymz280b"),
-		m_volume_filter(*this, { "volume_l", "volume_r" }),
-		m_screen(*this, "screen"),
-		m_palette(*this, "palette"),
-		m_ramdac(*this, "ramdac"),
-		m_scc66470(*this, "scc66470"),
-		m_sti3400(*this, "sti3400"),
-		m_strobein(*this, "STROBE%u", 0),
-		m_iostatus(*this, "IOSTATUS"),
-		m_initial_tube_fill(*this, "TUBE%u", 0U),
-		m_meters(*this, "meters"),
-		m_lamps(*this, "lamp%u", 0U),
-		m_coin_lockouts(*this, "coin_lockout%u", 0U),
-		m_scsic(*this, "ncr5380"),
-		m_watchdog(*this, "watchdog")
-	{ }
+	bfm_cobra3_state(const machine_config &mconfig, device_type type, const char *tag) ATTR_COLD;
 
 	void bfm_cobra3(machine_config &config) ATTR_COLD;
 	void c3_telly(machine_config &config) ATTR_COLD;
+
 	int meter_sense_r();
 	int pound_tube_low_r();
 	int twenty_p_tube_low_r();
 	DECLARE_INPUT_CHANGED_MEMBER(coin_inserted);
 
 protected:
+	void machine_start() override ATTR_COLD;
+	void machine_reset() override ATTR_COLD;
+
+private:
 	static constexpr unsigned NVRAM_BYTES = 16 * 1024;
 
-	// devices and memory
-	required_device<m68340_cpu_device> m_maincpu;
-	required_region_ptr<u16> m_cpuregion;
-	memory_share_creator<u16> m_mainram;
-	required_device<tms320av110_device> m_av110;
-	required_device<ymz280b_device> m_ymz;
-	required_device_array<filter_volume_device, 2> m_volume_filter;
-	required_device<screen_device> m_screen;
-	required_device<palette_device> m_palette;
-	required_device<ramdac_device> m_ramdac;
-	required_device<scc66470_device> m_scc66470;
-	required_device<sti3400_device> m_sti3400;
-	required_ioport_array<5> m_strobein;
-	required_ioport m_iostatus;
-	optional_ioport_array<2> m_initial_tube_fill;
-	required_device<meters_device> m_meters;
-	output_finder<24> m_lamps;
-	output_finder<5> m_coin_lockouts;
-	required_device<ncr5380_device> m_scsic;
-	required_device<watchdog_timer_device> m_watchdog;
-	std::unique_ptr<u8[]> m_scc_line_buffer;
-	std::unique_ptr<u32[]> m_sti_line_buffer;
-
-	u8 m_active_strobe;
-	bool m_vol_clock;
-	u8 m_volume;
-	u16 m_lamp_latch;
-	u8 m_lamp_port_a;
-	u8 m_meter_latch;
-	u8 m_triac_latch;
-	u8 m_pound_tube_level;
-	u8 m_twenty_p_tube_level;
-	bool m_tube_levels_initialized;
-
-	virtual void machine_start() override ATTR_COLD;
-	virtual void machine_reset() override ATTR_COLD;
-
-	void cabinet_outputs_w(u16 data);
-	void volume_control(bool direction, bool clock);
-	void set_coin_lockout(unsigned channel, bool state);
+	void update_lamps();
 	void lamp_latch_w(u16 data, u16 mem_mask);
 	void lamp_port_a_w(u8 data);
-	void update_lamps();
 	void update_meters(u16 data);
+	void cabinet_outputs_w(u16 data);
+	void set_coin_lockout(unsigned channel, bool state);
+
+	void volume_control(bool direction, bool clock);
 	void av110_reset_strobe_w(u8 data);
+
 	u16 io_r(offs_t offset, u16 mem_mask);
 	void io_w(offs_t offset, u16 data, u16 mem_mask);
 	u16 mem_r(offs_t offset, u16 mem_mask = ~0);
@@ -163,7 +112,71 @@ protected:
 	void bfm_cobra3_map(address_map &map) ATTR_COLD;
 	void ramdac_map(address_map &map) ATTR_COLD;
 	void scc66470_map(address_map &map) ATTR_COLD;
+
+	// Main board
+	required_device<m68340_cpu_device> m_maincpu;
+	required_region_ptr<u16> m_cpuregion;
+	memory_share_creator<u16> m_mainram;
+	required_device<ncr5380_device> m_scsic;
+	required_device<watchdog_timer_device> m_watchdog;
+
+	// Sound
+	required_device<tms320av110_device> m_av110;
+	required_device<ymz280b_device> m_ymz;
+	required_device_array<filter_volume_device, 2> m_volume_filter;
+
+	// Video
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
+	required_device<ramdac_device> m_ramdac;
+	required_device<scc66470_device> m_scc66470;
+	required_device<sti3400_device> m_sti3400;
+	std::unique_ptr<u8[]> m_scc_line_buffer;
+	std::unique_ptr<u32[]> m_sti_line_buffer;
+
+	// Cabinet I/O
+	required_ioport_array<5> m_strobein;
+	required_ioport m_iostatus;
+	optional_ioport_array<2> m_initial_tube_fill;
+	required_device<meters_device> m_meters;
+	output_finder<24> m_lamps;
+	output_finder<5> m_coin_lockouts;
+
+	u8 m_active_strobe = 0;
+	bool m_vol_clock = false;
+	u8 m_volume = 0;
+	u16 m_lamp_latch = 0;
+	u8 m_lamp_port_a = 0;
+	u8 m_meter_latch = 0;
+	u8 m_triac_latch = 0;
+	u8 m_pound_tube_level = 0;
+	u8 m_twenty_p_tube_level = 0;
+	bool m_tube_levels_initialized = false;
 };
+
+bfm_cobra3_state::bfm_cobra3_state(const machine_config &mconfig, device_type type, const char *tag)
+	: driver_device(mconfig, type, tag)
+	, m_maincpu(*this, "maincpu")
+	, m_cpuregion(*this, "maincpu")
+	, m_mainram(*this, "nvram", NVRAM_BYTES, ENDIANNESS_BIG)
+	, m_scsic(*this, "ncr5380")
+	, m_watchdog(*this, "watchdog")
+	, m_av110(*this, "av110")
+	, m_ymz(*this, "ymz280b")
+	, m_volume_filter(*this, { "volume_l", "volume_r" })
+	, m_screen(*this, "screen")
+	, m_palette(*this, "palette")
+	, m_ramdac(*this, "ramdac")
+	, m_scc66470(*this, "scc66470")
+	, m_sti3400(*this, "sti3400")
+	, m_strobein(*this, "STROBE%u", 0)
+	, m_iostatus(*this, "IOSTATUS")
+	, m_initial_tube_fill(*this, "TUBE%u", 0U)
+	, m_meters(*this, "meters")
+	, m_lamps(*this, "lamp%u", 0U)
+	, m_coin_lockouts(*this, "coin_lockout%u", 0U)
+{
+}
 
 void bfm_cobra3_state::update_lamps()
 {
@@ -209,6 +222,12 @@ void bfm_cobra3_state::cabinet_outputs_w(u16 data)
 		m_pound_tube_level--;
 }
 
+void bfm_cobra3_state::set_coin_lockout(unsigned channel, bool state)
+{
+	machine().bookkeeping().coin_lockout_w(channel, state);
+	m_coin_lockouts[channel] = state;
+}
+
 void bfm_cobra3_state::volume_control(bool direction, bool clock)
 {
 	bool const falling_edge = m_vol_clock && !clock;
@@ -231,49 +250,11 @@ void bfm_cobra3_state::volume_control(bool direction, bool clock)
 	m_volume_filter[1]->set_gain(fraction);
 }
 
-void bfm_cobra3_state::set_coin_lockout(unsigned channel, bool state)
-{
-	machine().bookkeeping().coin_lockout_w(channel, state);
-	m_coin_lockouts[channel] = state;
-}
-
 void bfm_cobra3_state::av110_reset_strobe_w(u8)
 {
 	// This decoded write pulses the AV110's active-low RESET input.
 	m_av110->reset_w(0);
 	m_av110->reset_w(1);
-}
-
-int bfm_cobra3_state::meter_sense_r()
-{
-	for (unsigned i = 0; i < 4; i++)
-	{
-		if (m_meters->get_activity(i))
-			return 1;
-	}
-
-	return 0;
-}
-
-int bfm_cobra3_state::pound_tube_low_r()
-{
-	return m_pound_tube_level <= 13; // the level switch opens above £13
-}
-
-int bfm_cobra3_state::twenty_p_tube_low_r()
-{
-	return m_twenty_p_tube_level <= 23; // the level switch opens above £4.60
-}
-
-INPUT_CHANGED_MEMBER(bfm_cobra3_state::coin_inserted)
-{
-	if (!newval || !BIT(m_strobein[2]->read(), 2))
-		return;
-
-	if ((param == 100) && (m_pound_tube_level < 40)) // £40 capacity
-		m_pound_tube_level++;
-	else if ((param == 20) && (m_twenty_p_tube_level < 150)) // £30 capacity
-		m_twenty_p_tube_level++;
 }
 
 u16 bfm_cobra3_state::io_r(offs_t offset, u16 mem_mask)
@@ -445,6 +426,60 @@ void bfm_cobra3_state::mem_w(offs_t offset, u16 data, u16 mem_mask)
 	}
 }
 
+u32 bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+{
+	bitmap.fill(0, cliprect);
+
+	rectangle const &visible = screen.visible_area();
+
+	if (m_sti3400->video_valid())
+	{
+		int const source_width = m_sti3400->video_width();
+		int const source_height = m_sti3400->video_height();
+		if (source_width && source_height)
+		{
+			rectangle video(visible);
+			video.set_size(std::min(source_width * 2, visible.width()), std::min(source_height, visible.height()));
+			video.set_origin(visible.left() + (visible.width() - video.width()) / 2, visible.top() + (visible.height() - video.height()) / 2);
+
+			rectangle const draw = video & cliprect;
+			int const source_left = ((source_width * 2 - video.width()) / 2 + draw.left() - video.left()) / 2;
+			int const source_right = ((source_width * 2 - video.width()) / 2 + draw.right() - video.left()) / 2;
+			for (int y = draw.top(); y <= draw.bottom(); y++)
+			{
+				u32 *const line = &bitmap.pix(y);
+				int const source_y = (source_height - video.height()) / 2 + y - video.top();
+				m_sti3400->video_line(source_y, source_left, source_right - source_left + 1, m_sti_line_buffer.get());
+				for (int x = draw.left(); x <= draw.right(); x++)
+				{
+					// SCC66470 8-bit output repeats each stored pixel twice horizontally.
+					int const source_x = ((source_width * 2 - video.width()) / 2 + x - video.left()) / 2;
+					line[x] = m_sti_line_buffer[source_x - source_left];
+				}
+			}
+		}
+	}
+
+	if (m_scc66470->display_enabled())
+	{
+		rectangle const draw = visible & cliprect;
+		for (int y = draw.top(); y <= draw.bottom(); y++)
+		{
+			u32 *const line = &bitmap.pix(y);
+			m_scc66470->line(y, m_scc_line_buffer.get(), visible.width());
+
+			for (int x = draw.left(); x <= draw.right(); x++)
+			{
+				u8 const pen = m_scc_line_buffer[x - visible.left()];
+				// The Cobra mixer selects external MPEG video for palette index 0xfe.
+				if (pen != 0xfe)
+					line[x] = m_palette->pen(pen);
+			}
+		}
+	}
+
+	return 0;
+}
 
 void bfm_cobra3_state::bfm_cobra3_map(address_map &map)
 {
@@ -463,6 +498,148 @@ void bfm_cobra3_state::ramdac_map(address_map &map)
 void bfm_cobra3_state::scc66470_map(address_map &map)
 {
 	map(0x00000, 0x7ffff).ram();
+}
+
+void bfm_cobra3_state::machine_start()
+{
+	m_scc_line_buffer = std::make_unique<u8[]>(m_screen->visible_area().width());
+	m_sti_line_buffer = std::make_unique<u32[]>(m_screen->visible_area().width());
+
+	save_item(NAME(m_active_strobe));
+	save_item(NAME(m_vol_clock));
+	save_item(NAME(m_volume));
+	save_item(NAME(m_lamp_latch));
+	save_item(NAME(m_lamp_port_a));
+	save_item(NAME(m_meter_latch));
+	save_item(NAME(m_triac_latch));
+	save_item(NAME(m_pound_tube_level));
+	save_item(NAME(m_twenty_p_tube_level));
+	save_item(NAME(m_tube_levels_initialized));
+	machine().save().register_postload(save_prepost_delegate(FUNC(bfm_cobra3_state::update_lamps), this));
+}
+
+void bfm_cobra3_state::machine_reset()
+{
+	if (!m_tube_levels_initialized && m_initial_tube_fill[0].found() && m_initial_tube_fill[1].found())
+	{
+		m_pound_tube_level = (m_initial_tube_fill[0]->read() * 40 + 50) / 100; // £40 capacity in £1 coins
+		m_twenty_p_tube_level = (m_initial_tube_fill[1]->read() * 150 + 50) / 100; // £30 capacity in 20p coins
+		m_tube_levels_initialized = true;
+	}
+}
+
+void bfm_cobra3_state::bfm_cobra3(machine_config &config)
+{
+	M68340(config, m_maincpu, 16'000'000); // TODO: verify clock source and frequency
+	m_maincpu->set_addrmap(AS_PROGRAM, &bfm_cobra3_state::bfm_cobra3_map);
+	m_maincpu->pa_out_callback().set(FUNC(bfm_cobra3_state::lamp_port_a_w));
+	mc68340_serial_module_device &serial(*m_maincpu->subdevice<mc68340_serial_module_device>("serial"));
+	serial.a_tx_cb().set("rs232_port1", FUNC(rs232_port_device::write_txd));
+	serial.b_tx_cb().set("bacta", FUNC(bacta_datalogger_device::write_txd));
+
+	rs232_port_device &rs232_port1(RS232_PORT(config, "rs232_port1", default_rs232_devices, nullptr));
+	rs232_port1.rxd_handler().set(serial, FUNC(mc68340_serial_module_device::rx_a_w));
+	rs232_port1.cts_handler().set(serial, FUNC(mc68340_serial_module_device::ip0_w));
+
+	bacta_datalogger_device &bacta(BACTA_DATALOGGER(config, "bacta"));
+	bacta.rxd_handler().set(serial, FUNC(mc68340_serial_module_device::rx_b_w));
+
+	NVRAM(config, "nvram", nvram_device::DEFAULT_ALL_0);
+
+	screen_device &screen(SCREEN(config, "screen"));
+	// The SCC66470 produces a pixel clock at half its oscillator frequency.
+	// Cobra uses its 768-pixel, 280-visible-line mode in a 312-line field.
+	screen.set_raw(30_MHz_XTAL / 2, 960, 0, 768, 312, 32, 312);
+	screen.set_video_attributes(VIDEO_UPDATE_SCANLINE);
+	screen.set_screen_update(FUNC(bfm_cobra3_state::screen_update));
+	screen.screen_vblank().set(m_sti3400, FUNC(sti3400_device::vblank_w));
+
+	PALETTE(config, m_palette).set_entries(256);
+
+	RAMDAC(config, m_ramdac, m_palette); // MUSIC Semiconductor TR9C1710 RAMDAC
+	m_ramdac->set_addrmap(0, &bfm_cobra3_state::ramdac_map);
+	m_ramdac->set_split_read(1);
+
+	SPEAKER(config, "lspeaker").front_left();
+	SPEAKER(config, "rspeaker").front_right();
+
+	FILTER_VOLUME(config, m_volume_filter[0]).add_route(ALL_OUTPUTS, "lspeaker", 1.0);
+	FILTER_VOLUME(config, m_volume_filter[1]).add_route(ALL_OUTPUTS, "rspeaker", 1.0);
+
+	YMZ280B(config, m_ymz, 16.9344_MHz_XTAL);
+	m_ymz->add_route(0, m_volume_filter[0], 1.0);
+	m_ymz->add_route(1, m_volume_filter[1], 1.0);
+
+	TMS320AV110(config, m_av110, 24_MHz_XTAL);
+	// Cobra enables decoder modes that require the optional external DRAM.
+	m_av110->set_external_dram(true);
+	// AV110 REQ and MC68340 DREQ2 are both active low.
+	m_av110->req().set(m_maincpu, FUNC(m68340_cpu_device::dma_dreq2_w));
+	m_av110->add_route(0, m_volume_filter[0], 1.0);
+	m_av110->add_route(1, m_volume_filter[1], 1.0);
+
+	SCC66470(config, m_scc66470, 30_MHz_XTAL);
+	m_scc66470->set_addrmap(0, &bfm_cobra3_state::scc66470_map);
+	m_scc66470->set_screen("screen");
+	m_scc66470->irq().set_inputline(m_maincpu, 5);
+
+	STI3400(config, m_sti3400, 0); // decoder clock and external-memory cycle timing are not modelled
+	m_sti3400->set_dram_size(1024 * 1024); // Cobra's buffer pointers cover a 1 MiB address space
+	m_sti3400->irq().set_inputline(m_maincpu, 6);
+
+	nscsi_bus_device &scsi(NSCSI_BUS(config, "scsi"));
+	// TODO: Verify the original drive speed; 2x was contemporary and is more realistic than the
+	// roughly 9,742 KB/s reported by Cobra diagnostics with the untimed device.
+	auto &cdrom(NSCSI_CDROM_2X(config, "cdrom"));
+	scsi.set_external_device(2, cdrom);
+
+	NCR5380(config, m_scsic);
+	scsi.set_external_device(6, m_scsic);
+	m_scsic->drq_handler().set(m_maincpu, FUNC(m68340_cpu_device::dma_dreq1_w)).invert();
+
+	// Provisional values match the watchdog model used by earlier Bellfruit drivers.
+	// TODO: Confirm the R/C values against Cobra 3 hardware.
+	WATCHDOG_TIMER(config, m_watchdog).set_time(PERIOD_OF_555_MONOSTABLE(RES_K(120), CAP_N(100)));
+	METERS(config, m_meters).set_number(4);
+}
+
+void bfm_cobra3_state::c3_telly(machine_config &config)
+{
+	bfm_cobra3(config);
+
+	m_meters->set_number(2);
+}
+
+int bfm_cobra3_state::meter_sense_r()
+{
+	for (unsigned i = 0; i < 4; i++)
+	{
+		if (m_meters->get_activity(i))
+			return 1;
+	}
+
+	return 0;
+}
+
+int bfm_cobra3_state::pound_tube_low_r()
+{
+	return m_pound_tube_level <= 13; // the level switch opens above £13
+}
+
+int bfm_cobra3_state::twenty_p_tube_low_r()
+{
+	return m_twenty_p_tube_level <= 23; // the level switch opens above £4.60
+}
+
+INPUT_CHANGED_MEMBER(bfm_cobra3_state::coin_inserted)
+{
+	if (!newval || !BIT(m_strobein[2]->read(), 2))
+		return;
+
+	if ((param == 100) && (m_pound_tube_level < 40)) // £40 capacity
+		m_pound_tube_level++;
+	else if ((param == 20) && (m_twenty_p_tube_level < 150)) // £30 capacity
+		m_twenty_p_tube_level++;
 }
 
 static INPUT_PORTS_START( bfm_cobra3 )
@@ -556,187 +733,7 @@ static INPUT_PORTS_START( c3_telly )
 	PORT_DIPSETTING(    0x40, "35%" )
 	PORT_DIPSETTING(    0x80, "40%" )
 	PORT_DIPSETTING(    0xc0, "50%" )
-
 INPUT_PORTS_END
-
-
-void bfm_cobra3_state::machine_start()
-{
-	m_scc_line_buffer = std::make_unique<u8[]>(m_screen->visible_area().width());
-	m_sti_line_buffer = std::make_unique<u32[]>(m_screen->visible_area().width());
-
-	m_active_strobe = 0;
-	m_vol_clock = 0;
-	m_volume = 0;
-	m_lamp_latch = 0;
-	m_lamp_port_a = 0;
-	m_meter_latch = 0;
-	m_triac_latch = 0;
-	m_pound_tube_level = 0;
-	m_twenty_p_tube_level = 0;
-	m_tube_levels_initialized = false;
-
-	save_item(NAME(m_active_strobe));
-	save_item(NAME(m_vol_clock));
-	save_item(NAME(m_volume));
-	save_item(NAME(m_lamp_latch));
-	save_item(NAME(m_lamp_port_a));
-	save_item(NAME(m_meter_latch));
-	save_item(NAME(m_triac_latch));
-	save_item(NAME(m_pound_tube_level));
-	save_item(NAME(m_twenty_p_tube_level));
-	save_item(NAME(m_tube_levels_initialized));
-	machine().save().register_postload(save_prepost_delegate(FUNC(bfm_cobra3_state::update_lamps), this));
-}
-
-void bfm_cobra3_state::machine_reset()
-{
-	if (!m_tube_levels_initialized && m_initial_tube_fill[0].found() && m_initial_tube_fill[1].found())
-	{
-		m_pound_tube_level = (m_initial_tube_fill[0]->read() * 40 + 50) / 100; // £40 capacity in £1 coins
-		m_twenty_p_tube_level = (m_initial_tube_fill[1]->read() * 150 + 50) / 100; // £30 capacity in 20p coins
-		m_tube_levels_initialized = true;
-	}
-}
-
-
-u32 bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
-{
-	bitmap.fill(0, cliprect);
-
-	rectangle const &visible = screen.visible_area();
-
-	if (m_sti3400->video_valid())
-	{
-		int const source_width = m_sti3400->video_width();
-		int const source_height = m_sti3400->video_height();
-		if (source_width && source_height)
-		{
-			rectangle video(visible);
-			video.set_size(std::min(source_width * 2, visible.width()), std::min(source_height, visible.height()));
-			video.set_origin(visible.left() + (visible.width() - video.width()) / 2, visible.top() + (visible.height() - video.height()) / 2);
-
-			rectangle const draw = video & cliprect;
-			int const source_left = ((source_width * 2 - video.width()) / 2 + draw.left() - video.left()) / 2;
-			int const source_right = ((source_width * 2 - video.width()) / 2 + draw.right() - video.left()) / 2;
-			for (int y = draw.top(); y <= draw.bottom(); y++)
-			{
-				u32 *const line = &bitmap.pix(y);
-				int const source_y = (source_height - video.height()) / 2 + y - video.top();
-				m_sti3400->video_line(source_y, source_left, source_right - source_left + 1, m_sti_line_buffer.get());
-				for (int x = draw.left(); x <= draw.right(); x++)
-				{
-					// SCC66470 8-bit output repeats each stored pixel twice horizontally.
-					int const source_x = ((source_width * 2 - video.width()) / 2 + x - video.left()) / 2;
-					line[x] = m_sti_line_buffer[source_x - source_left];
-				}
-			}
-		}
-	}
-
-	if (m_scc66470->display_enabled())
-	{
-		rectangle const draw = visible & cliprect;
-		for (int y = draw.top(); y <= draw.bottom(); y++)
-		{
-			u32 *const line = &bitmap.pix(y);
-			m_scc66470->line(y, m_scc_line_buffer.get(), visible.width());
-
-			for (int x = draw.left(); x <= draw.right(); x++)
-			{
-				u8 const pen = m_scc_line_buffer[x - visible.left()];
-				// The Cobra mixer selects external MPEG video for palette index 0xfe.
-				if (pen != 0xfe)
-					line[x] = m_palette->pen(pen);
-			}
-		}
-	}
-
-	return 0;
-}
-
-
-void bfm_cobra3_state::bfm_cobra3(machine_config &config)
-{
-	M68340(config, m_maincpu, 16'000'000); // TODO: verify clock source and frequency
-	m_maincpu->set_addrmap(AS_PROGRAM, &bfm_cobra3_state::bfm_cobra3_map);
-	m_maincpu->pa_out_callback().set(FUNC(bfm_cobra3_state::lamp_port_a_w));
-	mc68340_serial_module_device &serial(*m_maincpu->subdevice<mc68340_serial_module_device>("serial"));
-	serial.a_tx_cb().set("rs232_port1", FUNC(rs232_port_device::write_txd));
-	serial.b_tx_cb().set("bacta", FUNC(bacta_datalogger_device::write_txd));
-
-	rs232_port_device &rs232_port1(RS232_PORT(config, "rs232_port1", default_rs232_devices, nullptr));
-	rs232_port1.rxd_handler().set(serial, FUNC(mc68340_serial_module_device::rx_a_w));
-	rs232_port1.cts_handler().set(serial, FUNC(mc68340_serial_module_device::ip0_w));
-
-	bacta_datalogger_device &bacta(BACTA_DATALOGGER(config, "bacta"));
-	bacta.rxd_handler().set(serial, FUNC(mc68340_serial_module_device::rx_b_w));
-
-	NVRAM(config, "nvram", nvram_device::DEFAULT_ALL_0);
-
-	screen_device &screen(SCREEN(config, "screen"));
-	// The SCC66470 produces a pixel clock at half its oscillator frequency.
-	// Cobra uses its 768-pixel, 280-visible-line mode in a 312-line field.
-	screen.set_raw(30_MHz_XTAL / 2, 960, 0, 768, 312, 32, 312);
-	screen.set_video_attributes(VIDEO_UPDATE_SCANLINE);
-	screen.set_screen_update(FUNC(bfm_cobra3_state::screen_update));
-	screen.screen_vblank().set(m_sti3400, FUNC(sti3400_device::vblank_w));
-
-	PALETTE(config, m_palette).set_entries(256);
-
-	RAMDAC(config, m_ramdac, m_palette); // MUSIC Semiconductor TR9C1710 RAMDAC
-	m_ramdac->set_addrmap(0, &bfm_cobra3_state::ramdac_map);
-	m_ramdac->set_split_read(1);
-
-	SPEAKER(config, "lspeaker").front_left();
-	SPEAKER(config, "rspeaker").front_right();
-
-	FILTER_VOLUME(config, m_volume_filter[0]).add_route(ALL_OUTPUTS, "lspeaker", 1.0);
-	FILTER_VOLUME(config, m_volume_filter[1]).add_route(ALL_OUTPUTS, "rspeaker", 1.0);
-
-	YMZ280B(config, m_ymz, 16.9344_MHz_XTAL);
-	m_ymz->add_route(0, m_volume_filter[0], 1.0);
-	m_ymz->add_route(1, m_volume_filter[1], 1.0);
-
-	TMS320AV110(config, m_av110, 24_MHz_XTAL);
-	// Cobra enables decoder modes that require the optional external DRAM.
-	m_av110->set_external_dram(true);
-	// AV110 REQ and MC68340 DREQ2 are both active low.
-	m_av110->req().set(m_maincpu, FUNC(m68340_cpu_device::dma_dreq2_w));
-	m_av110->add_route(0, m_volume_filter[0], 1.0);
-	m_av110->add_route(1, m_volume_filter[1], 1.0);
-
-	SCC66470(config, m_scc66470, 30_MHz_XTAL);
-	m_scc66470->set_addrmap(0, &bfm_cobra3_state::scc66470_map);
-	m_scc66470->set_screen("screen");
-	m_scc66470->irq().set_inputline(m_maincpu, 5);
-
-	STI3400(config, m_sti3400, 0); // decoder clock and external-memory cycle timing are not modelled
-	m_sti3400->set_dram_size(1024 * 1024); // Cobra's buffer pointers cover a 1 MiB address space
-	m_sti3400->irq().set_inputline(m_maincpu, 6);
-
-	nscsi_bus_device &scsi(NSCSI_BUS(config, "scsi"));
-	// TODO: Verify the original drive speed; 2x was contemporary and is more realistic than the
-	// roughly 9,742 KB/s reported by Cobra diagnostics with the untimed device.
-	auto &cdrom(NSCSI_CDROM_2X(config, "cdrom"));
-	scsi.set_external_device(2, cdrom);
-
-	NCR5380(config, m_scsic);
-	scsi.set_external_device(6, m_scsic);
-	m_scsic->drq_handler().set(m_maincpu, FUNC(m68340_cpu_device::dma_dreq1_w)).invert();
-
-	// Provisional values match the watchdog model used by earlier Bellfruit drivers.
-	// TODO: Confirm the R/C values against Cobra 3 hardware.
-	WATCHDOG_TIMER(config, m_watchdog).set_time(PERIOD_OF_555_MONOSTABLE(RES_K(120), CAP_N(100)));
-	METERS(config, m_meters).set_number(4);
-}
-
-void bfm_cobra3_state::c3_telly(machine_config &config)
-{
-	bfm_cobra3(config);
-
-	m_meters->set_number(2);
-}
 
 ROM_START( c3_rtime )
 	ROM_REGION( 0x100000, "maincpu", 0 )
