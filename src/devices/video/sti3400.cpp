@@ -179,13 +179,8 @@ bool sti3400_device::execute_task()
 
 TIMER_CALLBACK_MEMBER(sti3400_device::decode_tick)
 {
-	if (m_task_active)
-	{
-		if (execute_task())
-			m_task_active = false;
-		else
-			m_decode_timer->adjust(attotime::from_hz(m_frame_rate));
-	}
+	if (m_task_active && execute_task())
+		m_task_active = false;
 
 	update_status();
 	activate_event();
@@ -215,6 +210,10 @@ void sti3400_device::vblank_w(int state)
 		m_task_active = true;
 		m_repeat_pending = bool(m_registers[REG_INS] & INS_RPT);
 		finish_event();
+		// PSD is a three-clock status pulse at DSYNC.  As primary-clock timing is
+		// not modelled, latch its interrupt-visible rising edge directly.
+		m_interrupt_status |= STA_PSD;
+		update_irq();
 		m_decode_timer->adjust(attotime::zero);
 	}
 }
@@ -246,6 +245,10 @@ void sti3400_device::stream_byte_w(u8 data)
 
 	update_status();
 	activate_event();
+
+	// Resume a parked picture task at the modelled picture cadence once CDF input returns.
+	if (m_task_active && !m_decode_timer->enabled())
+		m_decode_timer->adjust(attotime::from_hz(m_frame_rate));
 }
 
 bool sti3400_device::video_valid() const

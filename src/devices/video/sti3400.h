@@ -53,6 +53,7 @@ private:
 	static constexpr u16 STA_HFE = 0x0004; // header FIFO empty
 	static constexpr u16 STA_BBF = 0x0008; // bit buffer nearly full
 	static constexpr u16 STA_BBE = 0x0010; // bit buffer nearly empty
+	static constexpr u16 STA_PSD = 0x0040; // pipeline starting to decode
 	static constexpr u16 STA_PID = 0x0200; // decoding pipeline idle
 	static constexpr u16 STA_HFF = 0x1000; // header FIFO full
 	static constexpr u16 STA_RESET = STA_PID | STA_BBE | STA_HFE; // hard-reset status
