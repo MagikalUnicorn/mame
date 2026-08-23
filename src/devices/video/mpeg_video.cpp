@@ -278,23 +278,99 @@ constexpr vlc_entry s_dc_size_chrominance[] =
 	make_vlc<vlc_entry>("11111110", 8)
 };
 
-template <typename T, std::size_t N, typename P, typename S>
-bool decode_vlc(const T (&table)[N], int max_bits, P &&peek, S &&skip, int &value)
+template <typename T, std::size_t N, unsigned MaxBits>
+class vlc_decoder
 {
-	for (int bits = 1; bits <= max_bits; bits++)
+public:
+	struct match
 	{
-		const u32 code = peek(bits);
-		for (const T &entry : table)
+		s16 entry;
+		u8 bits;
+	};
+
+	constexpr vlc_decoder(const T (&table)[N]) :
+		m_nodes{}
+	{
+		for (node &item : m_nodes)
+			item = node{ { -1, -1 }, -1 };
+
+		s16 node_count = 1;
+		for (unsigned entry = 0; entry != N; entry++)
 		{
-			if ((entry.bits == bits) && (entry.code == code))
+			s16 current = 0;
+			for (unsigned bit = table[entry].bits; bit; bit--)
 			{
-				skip(bits);
-				value = entry.value;
-				return true;
+				s16 &next = m_nodes[current].child[BIT(table[entry].code, bit - 1)];
+				if (next < 0)
+				{
+					next = node_count++;
+					m_nodes[next] = node{ { -1, -1 }, -1 };
+				}
+				current = next;
 			}
+			m_nodes[current].entry = entry;
 		}
 	}
-	return false;
+
+	match lookup(u32 code, unsigned bits) const
+	{
+		s16 current = 0;
+		for (unsigned consumed = 0; consumed != bits; consumed++)
+		{
+			current = m_nodes[current].child[BIT(code, bits - consumed - 1)];
+			if (current < 0)
+				break;
+			if (m_nodes[current].entry >= 0)
+				return match{ m_nodes[current].entry, u8(consumed + 1) };
+		}
+		return match{ -1, 0 };
+	}
+
+	static constexpr unsigned max_bits() { return MaxBits; }
+
+private:
+	struct node
+	{
+		s16 child[2];
+		s16 entry;
+	};
+
+	node m_nodes[N * MaxBits + 1];
+};
+
+template <unsigned MaxBits, typename T, std::size_t N>
+constexpr auto make_vlc_decoder(const T (&table)[N])
+{
+	return vlc_decoder<T, N, MaxBits>(table);
+}
+
+constexpr auto s_macroblock_address_increment_decoder = make_vlc_decoder<11>(s_macroblock_address_increment);
+constexpr auto s_coded_block_pattern_decoder = make_vlc_decoder<9>(s_coded_block_pattern);
+constexpr auto s_motion_code_decoder = make_vlc_decoder<11>(s_motion_code);
+constexpr auto s_dct_coefficient_decoder = make_vlc_decoder<16>(s_dct_coefficient);
+constexpr auto s_i_macroblock_type_decoder = make_vlc_decoder<2>(s_i_macroblock_type);
+constexpr auto s_p_macroblock_type_decoder = make_vlc_decoder<6>(s_p_macroblock_type);
+constexpr auto s_b_macroblock_type_decoder = make_vlc_decoder<6>(s_b_macroblock_type);
+constexpr auto s_d_macroblock_type_decoder = make_vlc_decoder<1>(s_d_macroblock_type);
+constexpr auto s_dc_size_luminance_decoder = make_vlc_decoder<7>(s_dc_size_luminance);
+constexpr auto s_dc_size_chrominance_decoder = make_vlc_decoder<8>(s_dc_size_chrominance);
+
+template <typename T, std::size_t N, unsigned MaxBits, typename P, typename S>
+const T *decode_vlc(const T (&table)[N], const vlc_decoder<T, N, MaxBits> &decoder,
+		int available, P &&peek, S &&skip)
+{
+	const unsigned lookahead = std::min<unsigned>(decoder.max_bits(), std::max(available, 0));
+	const auto match = decoder.lookup(peek(lookahead), lookahead);
+	if (match.entry >= 0)
+	{
+		skip(match.bits);
+		return &table[match.entry];
+	}
+
+	// Preserve streaming semantics: a truncated prefix needs more data rather than being invalid.
+	if (lookahead < decoder.max_bits())
+		peek(lookahead + 1);
+	return nullptr;
 }
 
 const u8 mpeg_video::s_default_intra_quantizer_matrix[64] =
@@ -1101,36 +1177,37 @@ int mpeg_video::macroblock_address_increment()
 		increment += 33;
 	}
 
-	int value;
-	if (!decode_vlc(s_macroblock_address_increment, 11,
+	const vlc_entry *const entry = decode_vlc(
+			s_macroblock_address_increment,
+			s_macroblock_address_increment_decoder,
+			m_current_limit - m_current_pos,
 			[this] (int bits) { return peek(bits); },
-			[this] (int bits) { gb(bits); }, value))
-	{
+			[this] (int bits) { m_current_pos += bits; });
+	if (!entry)
 		throw invalid_stream();
-	}
-	return increment + value;
+	return increment + entry->value;
 }
 
 mpeg_video::macroblock_type mpeg_video::macroblock_type_code()
 {
-	int value = 0;
-	bool valid = false;
-	auto const read = [this, &value, &valid] (auto const &table, int max_bits)
+	const vlc_entry *entry = nullptr;
+	auto const read = [this, &entry] (auto const &table, auto const &decoder)
 	{
-		valid = decode_vlc(table, max_bits,
+		entry = decode_vlc(table, decoder, m_current_limit - m_current_pos,
 				[this] (int bits) { return peek(bits); },
-				[this] (int bits) { gb(bits); }, value);
+				[this] (int bits) { m_current_pos += bits; });
 	};
 
 	switch (m_picture_coding_type)
 	{
-	case 1: read(s_i_macroblock_type, 2); break;
-	case 2: read(s_p_macroblock_type, 6); break;
-	case 3: read(s_b_macroblock_type, 6); break;
-	case 4: read(s_d_macroblock_type, 1); break;
+	case 1: read(s_i_macroblock_type, s_i_macroblock_type_decoder); break;
+	case 2: read(s_p_macroblock_type, s_p_macroblock_type_decoder); break;
+	case 3: read(s_b_macroblock_type, s_b_macroblock_type_decoder); break;
+	case 4: read(s_d_macroblock_type, s_d_macroblock_type_decoder); break;
 	}
-	if (!valid)
+	if (!entry)
 		throw invalid_stream();
+	const int value = entry->value;
 
 	return macroblock_type
 	{
@@ -1144,41 +1221,44 @@ mpeg_video::macroblock_type mpeg_video::macroblock_type_code()
 
 int mpeg_video::coded_block_pattern()
 {
-	int value;
-	if (!decode_vlc(s_coded_block_pattern, 9,
+	const vlc_entry *const entry = decode_vlc(
+			s_coded_block_pattern,
+			s_coded_block_pattern_decoder,
+			m_current_limit - m_current_pos,
 			[this] (int bits) { return peek(bits); },
-			[this] (int bits) { gb(bits); }, value))
-	{
+			[this] (int bits) { m_current_pos += bits; });
+	if (!entry)
 		throw invalid_stream();
-	}
-	return value;
+	return entry->value;
 }
 
 int mpeg_video::motion_code()
 {
-	int value;
-	if (!decode_vlc(s_motion_code, 11,
+	const vlc_entry *const entry = decode_vlc(
+			s_motion_code,
+			s_motion_code_decoder,
+			m_current_limit - m_current_pos,
 			[this] (int bits) { return peek(bits); },
-			[this] (int bits) { gb(bits); }, value))
-	{
+			[this] (int bits) { m_current_pos += bits; });
+	if (!entry)
 		throw invalid_stream();
-	}
-	return value;
+	return entry->value;
 }
 
 int mpeg_video::dc_size(bool luminance)
 {
-	int value;
-	const bool valid = luminance
-		? decode_vlc(s_dc_size_luminance, 7,
+	const vlc_entry *const entry = luminance
+		? decode_vlc(s_dc_size_luminance, s_dc_size_luminance_decoder,
+				m_current_limit - m_current_pos,
 				[this] (int bits) { return peek(bits); },
-				[this] (int bits) { gb(bits); }, value)
-		: decode_vlc(s_dc_size_chrominance, 8,
+				[this] (int bits) { m_current_pos += bits; })
+		: decode_vlc(s_dc_size_chrominance, s_dc_size_chrominance_decoder,
+				m_current_limit - m_current_pos,
 				[this] (int bits) { return peek(bits); },
-				[this] (int bits) { gb(bits); }, value);
-	if (!valid)
+				[this] (int bits) { m_current_pos += bits; });
+	if (!entry)
 		throw invalid_stream();
-	return value;
+	return entry->value;
 }
 
 void mpeg_video::dct_coefficient(bool first, int &run, int &level)
@@ -1223,19 +1303,17 @@ void mpeg_video::dct_coefficient(bool first, int &run, int &level)
 		return;
 	}
 
-	for (int bits = 3; bits <= 16; bits++)
+	const dct_vlc_entry *const entry = decode_vlc(
+			s_dct_coefficient,
+			s_dct_coefficient_decoder,
+			m_current_limit - m_current_pos,
+			[this] (int bits) { return peek(bits); },
+			[this] (int bits) { m_current_pos += bits; });
+	if (entry)
 	{
-		const u32 code = peek(bits);
-		for (dct_vlc_entry const &entry : s_dct_coefficient)
-		{
-			if ((entry.bits == bits) && (entry.code == code))
-			{
-				gb(bits);
-				run = entry.run;
-				level = gb(1) ? -entry.level : entry.level;
-				return;
-			}
-		}
+		run = entry->run;
+		level = gb(1) ? -entry->level : entry->level;
+		return;
 	}
 	throw invalid_stream();
 }
@@ -1255,15 +1333,16 @@ u32 mpeg_video::peek(int count) const
 {
 	if ((count < 0) || (count > 32) || ((m_current_pos + count) > m_current_limit))
 		throw limit_hit();
+	if (!count)
+		return 0;
 
-	u32 value = 0;
-	for (int bit = 0; bit != count; bit++)
-	{
-		value <<= 1;
-		if (m_base[(m_current_pos + bit) >> 3] & (0x80 >> ((m_current_pos + bit) & 7)))
-			value |= 1;
-	}
-	return value;
+	const unsigned byte_position = m_current_pos / 8;
+	const unsigned bit_offset = m_current_pos & 7;
+	const unsigned bytes = (bit_offset + count + 7) / 8;
+	u64 source = 0;
+	for (unsigned byte = 0; byte != bytes; byte++)
+		source = (source << 8) | m_base[byte_position + byte];
+	return (source >> (bytes * 8 - bit_offset - count)) & make_bitmask<u32>(count);
 }
 
 u32 mpeg_video::gb(int count)
