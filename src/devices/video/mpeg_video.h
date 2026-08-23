@@ -139,7 +139,7 @@ private:
 	frame m_current_frame;
 	frame m_forward_reference;
 	frame m_backward_reference;
-	double m_cosine[8][8];
+	double m_idct_basis[8][8];
 
 	void sequence_header();
 	void group_of_pictures();
@@ -156,7 +156,7 @@ private:
 	void predict_plane(u8 *destination, int destination_pitch, const u8 *reference, int reference_pitch,
 					int x, int y, int width, int height, motion_vector vector, bool chroma, bool average) const;
 	void put_block(unsigned index, const int *values, bool intra);
-	void inverse_dct(const int *coefficients, int *values) const;
+	void inverse_dct(const int *coefficients, int *values, bool dc_only) const;
 	void read_frame(frame &destination, const u8 *source, unsigned source_bytes) const;
 	void write_frame(const frame &source, u8 *output, unsigned output_bytes) const;
 

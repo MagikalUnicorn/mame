@@ -351,7 +351,11 @@ mpeg_video::mpeg_video(const void *base, int maximum_width, int maximum_height) 
 	for (int x = 0; x != 8; x++)
 	{
 		for (int u = 0; u != 8; u++)
-			m_cosine[x][u] = std::cos((2 * x + 1) * u * std::numbers::pi / 16.0);
+		{
+			// Fold the IDCT's quarter scaling and C(u) normalization into its two passes.
+			const double scale = u ? 0.5 : (0.5 / std::numbers::sqrt2);
+			m_idct_basis[x][u] = scale * std::cos((2 * x + 1) * u * std::numbers::pi / 16.0);
+		}
 	}
 
 	clear();
@@ -960,9 +964,11 @@ void mpeg_video::block(unsigned index, bool intra)
 	}
 
 	int coefficients[64];
+	bool dc_only = true;
 	for (unsigned natural = 0; natural != 64; natural++)
 	{
 		const int level = quantized[s_scan[natural]];
+		dc_only = dc_only && (!natural || !level);
 		const int sign = (level > 0) - (level < 0);
 		int reconstructed;
 		if (intra)
@@ -988,7 +994,7 @@ void mpeg_video::block(unsigned index, bool intra)
 	}
 
 	int values[64];
-	inverse_dct(coefficients, values);
+	inverse_dct(coefficients, values, dc_only);
 	put_block(index, values, intra);
 }
 
@@ -1027,9 +1033,26 @@ void mpeg_video::put_block(unsigned index, const int *values, bool intra)
 	}
 }
 
-void mpeg_video::inverse_dct(const int *coefficients, int *values) const
+void mpeg_video::inverse_dct(const int *coefficients, int *values, bool dc_only) const
 {
-	constexpr double INVERSE_SQRT_TWO = 0.70710678118654752440;
+	if (dc_only)
+	{
+		// A block with no AC coefficients has the same value in every sample.
+		std::fill_n(values, 64, std::clamp<int>(std::lround(double(coefficients[0]) / 8.0), -256, 255));
+		return;
+	}
+
+	double intermediate[8][8];
+	for (int v = 0; v != 8; v++)
+	{
+		for (int x = 0; x != 8; x++)
+		{
+			double sum = 0.0;
+			for (int u = 0; u != 8; u++)
+				sum += coefficients[v * 8 + u] * m_idct_basis[x][u];
+			intermediate[v][x] = sum;
+		}
+	}
 
 	for (int y = 0; y != 8; y++)
 	{
@@ -1037,15 +1060,8 @@ void mpeg_video::inverse_dct(const int *coefficients, int *values) const
 		{
 			double sum = 0.0;
 			for (int v = 0; v != 8; v++)
-			{
-				const double vertical_scale = v ? 1.0 : INVERSE_SQRT_TWO;
-				for (int u = 0; u != 8; u++)
-				{
-					const double horizontal_scale = u ? 1.0 : INVERSE_SQRT_TWO;
-					sum += horizontal_scale * vertical_scale * coefficients[v * 8 + u] * m_cosine[x][u] * m_cosine[y][v];
-				}
-			}
-			values[y * 8 + x] = std::clamp<int>(std::lround(sum / 4.0), -256, 255);
+				sum += intermediate[v][x] * m_idct_basis[y][v];
+			values[y * 8 + x] = std::clamp<int>(std::lround(sum), -256, 255);
 		}
 	}
 }
