@@ -54,6 +54,7 @@
 #include "machine/rescap.h"
 #include "machine/scc66470.h"
 #include "machine/watchdog.h"
+#include "sound/flt_vol.h"
 #include "sound/tms320av110.h"
 #include "sound/ymz280b.h"
 #include "video/ramdac.h"
@@ -81,6 +82,7 @@ public:
 		m_mainram(*this, "nvram", NVRAM_BYTES, ENDIANNESS_BIG),
 		m_av110(*this, "av110"),
 		m_ymz(*this, "ymz280b"),
+		m_volume_filter(*this, { "volume_l", "volume_r" }),
 		m_screen(*this, "screen"),
 		m_palette(*this, "palette"),
 		m_ramdac(*this, "ramdac"),
@@ -112,6 +114,7 @@ protected:
 	memory_share_creator<u16> m_mainram;
 	required_device<tms320av110_device> m_av110;
 	required_device<ymz280b_device> m_ymz;
+	required_device_array<filter_volume_device, 2> m_volume_filter;
 	required_device<screen_device> m_screen;
 	required_device<palette_device> m_palette;
 	required_device<ramdac_device> m_ramdac;
@@ -224,11 +227,8 @@ void bfm_cobra3_state::volume_control(bool direction, bool clock)
 	}
 
 	float const fraction = (32 - m_volume) / 32.0f;
-
-	m_ymz->set_output_gain(0, fraction);
-	m_ymz->set_output_gain(1, fraction);
-	m_av110->set_output_gain(0, fraction);
-	m_av110->set_output_gain(1, fraction);
+	m_volume_filter[0]->set_gain(fraction);
+	m_volume_filter[1]->set_gain(fraction);
 }
 
 void bfm_cobra3_state::set_coin_lockout(unsigned channel, bool state)
@@ -691,17 +691,20 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	SPEAKER(config, "lspeaker").front_left();
 	SPEAKER(config, "rspeaker").front_right();
 
+	FILTER_VOLUME(config, m_volume_filter[0]).add_route(ALL_OUTPUTS, "lspeaker", 1.0);
+	FILTER_VOLUME(config, m_volume_filter[1]).add_route(ALL_OUTPUTS, "rspeaker", 1.0);
+
 	YMZ280B(config, m_ymz, 16.9344_MHz_XTAL);
-	m_ymz->add_route(0, "lspeaker", 1.0);
-	m_ymz->add_route(1, "rspeaker", 1.0);
+	m_ymz->add_route(0, m_volume_filter[0], 1.0);
+	m_ymz->add_route(1, m_volume_filter[1], 1.0);
 
 	TMS320AV110(config, m_av110, 24_MHz_XTAL);
 	// Cobra enables decoder modes that require the optional external DRAM.
 	m_av110->set_external_dram(true);
 	// AV110 REQ and MC68340 DREQ2 are both active low.
 	m_av110->req().set(m_maincpu, FUNC(m68340_cpu_device::dma_dreq2_w));
-	m_av110->add_route(0, "lspeaker", 1.0);
-	m_av110->add_route(1, "rspeaker", 1.0);
+	m_av110->add_route(0, m_volume_filter[0], 1.0);
+	m_av110->add_route(1, m_volume_filter[1], 1.0);
 
 	SCC66470(config, m_scc66470, 30_MHz_XTAL);
 	m_scc66470->set_addrmap(0, &bfm_cobra3_state::scc66470_map);
