@@ -59,6 +59,7 @@ void sti3400_device::device_start()
 	save_item(NAME(m_input_bytes));
 	save_item(NAME(m_input_bit_position));
 	save_item(NAME(m_display_pointer));
+	save_item(NAME(m_presented_pointer));
 	save_item(NAME(m_reconstructed_pointer));
 	save_item(NAME(m_forward_pointer));
 	save_item(NAME(m_backward_pointer));
@@ -103,6 +104,7 @@ void sti3400_device::reset_decoder()
 	m_input_bytes = 0;
 	m_input_bit_position = 0;
 	m_display_pointer = 0;
+	m_presented_pointer = 0;
 	m_reconstructed_pointer = 0;
 	m_forward_pointer = 0;
 	m_backward_pointer = 0;
@@ -195,10 +197,16 @@ void sti3400_device::vblank_w(int state)
 	if (!state)
 		return;
 
-	m_overwrite_display_active = false;
-
-	// DFP is double-buffered by the hardware and becomes active at VSYNC.
+	// DFP is double-buffered by the hardware and becomes active at VSYNC.  The
+	// physical pipeline can display a buffer while reconstruction finishes;
+	// retain the preceding complete picture until the whole-picture backend
+	// finishes an active task targeting the newly selected buffer.
 	m_display_pointer = m_registers[REG_DFP] & PICTURE_POINTER_MASK;
+	if (!m_task_active || (m_display_pointer != m_reconstructed_pointer))
+	{
+		m_overwrite_display_active = false;
+		m_presented_pointer = m_display_pointer;
+	}
 	m_width = m_decoded_width;
 	m_height = m_decoded_height;
 
@@ -266,7 +274,7 @@ void sti3400_device::stream_byte_w(u8 data)
 
 bool sti3400_device::video_valid() const
 {
-	const u32 picture = m_display_pointer & ((m_dram_size / BIT_BUFFER_LEVEL_UNIT_BYTES) - 1);
+	const u32 picture = m_presented_pointer & ((m_dram_size / BIT_BUFFER_LEVEL_UNIT_BYTES) - 1);
 	return m_picture_valid[picture];
 }
 
@@ -288,7 +296,7 @@ void sti3400_device::video_line(u32 y, u32 x, u32 width, u32 *destination) const
 	assert(width <= (m_width - x));
 
 	const u32 mask = m_dram_size - 1;
-	const u32 base = (u32(m_display_pointer) * BIT_BUFFER_LEVEL_UNIT_BYTES) & mask;
+	const u32 base = (u32(m_presented_pointer) * BIT_BUFFER_LEVEL_UNIT_BYTES) & mask;
 	const u32 luma_pitch = (m_width + 15) & ~15;
 	const u32 luma_rows = (m_height + 15) & ~15;
 	const u32 luma_bytes = luma_pitch * luma_rows;

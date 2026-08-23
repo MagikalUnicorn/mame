@@ -166,6 +166,7 @@ private:
 	std::unique_ptr<u8[]> m_overwrite_display;
 	std::unique_ptr<u8[]> m_picture_valid;
 	u16 m_display_pointer = 0;
+	u16 m_presented_pointer = 0;
 	u16 m_reconstructed_pointer = 0;
 	u16 m_forward_pointer = 0;
 	u16 m_backward_pointer = 0;
