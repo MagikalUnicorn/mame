@@ -160,7 +160,6 @@ public:
 	{ }
 
 	void c3_telly(machine_config &config) ATTR_COLD;
-	int meter_sense_r();
 	int pound_tube_low_r();
 	int twenty_p_tube_low_r();
 	DECLARE_INPUT_CHANGED_MEMBER(coin_inserted);
@@ -263,17 +262,6 @@ void bfm_cobra3_state::av110_reset_strobe_w(u8)
 int bfm_cobra3_state::meter_sense_r()
 {
 	for (unsigned i = 0; i < 4; i++)
-	{
-		if (m_meters->get_activity(i))
-			return 1;
-	}
-
-	return 0;
-}
-
-int c3_telly_state::meter_sense_r()
-{
-	for (unsigned i = 0; i < 2; i++)
 	{
 		if (m_meters->get_activity(i))
 			return 1;
@@ -529,7 +517,6 @@ static INPUT_PORTS_START( c3_telly )
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_COIN2 ) PORT_NAME("50p") PORT_IMPULSE(3)
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_COIN1 ) PORT_NAME(u8"£1") PORT_IMPULSE(3) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(c3_telly_state::coin_inserted), 100)
 	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_UNUSED )
-	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(FUNC(c3_telly_state::meter_sense_r))
 
 	PORT_MODIFY("STROBE0")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("A (Left)") PORT_CODE(KEYCODE_A)
