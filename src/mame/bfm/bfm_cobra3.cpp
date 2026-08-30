@@ -14,20 +14,32 @@
      press Start to exit, then toggle Refill/Volume Setup Mode off.
    - To use the test routines, open the Back and Front Doors (T), then press
      Test (F1).  Use Up/Down to choose a test and Start to enter or leave it.
-     METER TEST requires Refill/Volume Setup Mode to be on before entering and off
-     again before leaving.
+     METER TEST requires Refill/Volume Setup Mode to be on before entering and
+     off again before leaving.
    - With the doors open, pressing Test twice within one second supplies two
      demonstration credits.  This is free play rather than an automatic demo:
      the player must still answer the questions.  Counters and payouts remain
      disabled.
    - CASHFLOW TEST is a read-only audit display.  Cash and meter counters do
      not advance while the test routines are active.
-   - Inserting £1 or 20p coins with Refill/Volume Setup Mode active replenishes the
-     corresponding tube and records CASH REFILL rather than CASH IN.
+   - Inserting £1 or 20p coins with Refill/Volume Setup Mode active replenishes
+     the corresponding tube and records CASH REFILL rather than CASH IN.
    - The Initial Tube Fill adjusters are sampled when the machine starts.  At
      the default 100%, the £1 tube holds 40 coins (£40) and the 20p tube holds
      150 coins (£30), allowing immediate payouts.  Restart after changing an
      initial fill setting.
+
+   Other title user notes:
+   - Radio Times accepts £1 (5), 50p (6), 20p (7) and 10p (8).  Its left A-D
+     controls use A/B/C/D, its right A-D controls use Z/X/V/N, and Start is 1.
+   - Top of the Pops and The Phrase That Pays normally accept £1 (5), 50p (6),
+     20p (7) and £2 (8).  Although their software recognises 10p and 5p codes,
+     those denominations are inhibited and are not exposed as player inputs.
+   - Top of the Pops identifies its payout unit as a £1 payslide.  The Phrase
+     That Pays identifies its payout unit as a £1 hopper.
+   - In The Phrase That Pays, after inserting credit, A (Right) (Left Shift)
+     selects the 50p game and C (Right) (X) selects the £1 game.  Spin (1)
+     starts the selected game.
 
    BTANB:
    - Pressing Test with the Back and Front Doors closed can skip or interrupt
@@ -39,6 +51,11 @@
    - RESET ERROR 1 is the game's anti-tamper response to fewer than five
      detected resets, not an emulation failure.  Close the Back and Front
      Doors and allow the alarm delay to expire to clear it.
+   - RESET ERROR 2 has the same recovery procedure as RESET ERROR 1, but its
+     alarm delay takes longer to expire.
+   - Top of the Pops uses generic music tracks rather than the chart recordings
+     represented by its questions.  This is assumed to be a licensing choice,
+     not missing media or incorrect audio emulation.
 */
 
 #include "emu.h"
@@ -81,6 +98,7 @@ public:
 	void c3_telly(machine_config &config) ATTR_COLD;
 
 	int meter_sense_r();
+	ioport_value coin_acceptor_r();
 	int pound_tube_low_r();
 	int twenty_p_tube_low_r();
 	DECLARE_INPUT_CHANGED_MEMBER(coin_inserted);
@@ -97,7 +115,7 @@ private:
 	void lamp_port_a_w(u8 data);
 	void update_meters(u16 data);
 	void cabinet_outputs_w(u16 data);
-	void set_coin_lockout(unsigned channel, bool state);
+	void update_coin_lockouts(u8 enables);
 
 	void volume_control(bool direction, bool clock);
 	void av110_reset_strobe_w(u8 data);
@@ -137,6 +155,7 @@ private:
 	// Cabinet I/O
 	required_ioport_array<5> m_strobein;
 	required_ioport m_iostatus;
+	optional_ioport m_coin_inputs;
 	optional_ioport_array<2> m_initial_tube_fill;
 	required_device<meters_device> m_meters;
 	output_finder<24> m_lamps;
@@ -171,6 +190,7 @@ bfm_cobra3_state::bfm_cobra3_state(const machine_config &mconfig, device_type ty
 	, m_sti3400(*this, "sti3400")
 	, m_strobein(*this, "STROBE%u", 0)
 	, m_iostatus(*this, "IOSTATUS")
+	, m_coin_inputs(*this, "COINS")
 	, m_initial_tube_fill(*this, "TUBE%u", 0U)
 	, m_meters(*this, "meters")
 	, m_lamps(*this, "lamp%u", 0U)
@@ -222,10 +242,26 @@ void bfm_cobra3_state::cabinet_outputs_w(u16 data)
 		m_pound_tube_level--;
 }
 
-void bfm_cobra3_state::set_coin_lockout(unsigned channel, bool state)
+void bfm_cobra3_state::update_coin_lockouts(u8 enables)
 {
-	machine().bookkeeping().coin_lockout_w(channel, state);
-	m_coin_lockouts[channel] = state;
+	bool const lockouts[] =
+	{
+		!BIT(enables, 3), // £1
+		!BIT(enables, 2), // 50p
+		!BIT(enables, 1), // 20p
+		!BIT(enables, 0), // 10p
+		!BIT(enables, 4)  // fifth validator channel
+	};
+
+	for (unsigned channel = 0; channel < std::size(lockouts); channel++)
+		m_coin_lockouts[channel] = lockouts[channel];
+
+	// The encoded acceptor uses the fourth logical coin input for £2, which has no inhibit output.
+	unsigned const mapped_channels = m_coin_inputs.found() ? 3 : std::size(lockouts);
+	for (unsigned channel = 0; channel < mapped_channels; channel++)
+		machine().bookkeeping().coin_lockout_w(channel, lockouts[channel]);
+	if (m_coin_inputs.found())
+		machine().bookkeeping().coin_lockout_w(3, false);
 }
 
 void bfm_cobra3_state::volume_control(bool direction, bool clock)
@@ -305,14 +341,7 @@ void bfm_cobra3_state::io_w(offs_t offset, u16 data, u16 mem_mask)
 
 		case 0x100:
 			if (ACCESSING_BITS_8_15)
-			{
-				u8 const enables = data >> 8;
-				set_coin_lockout(0, !BIT(enables, 3)); // £1
-				set_coin_lockout(1, !BIT(enables, 2)); // 50p
-				set_coin_lockout(2, !BIT(enables, 1)); // 20p
-				set_coin_lockout(3, !BIT(enables, 0)); // 10p
-				set_coin_lockout(4, !BIT(enables, 4)); // fifth validator channel
-			}
+				update_coin_lockouts(data >> 8);
 			break;
 
 		case 0x200:
@@ -620,6 +649,21 @@ int bfm_cobra3_state::meter_sense_r()
 	return 0;
 }
 
+ioport_value bfm_cobra3_state::coin_acceptor_r()
+{
+	// The later Cobra games decode six denominations from five acceptor lines.
+	switch (m_coin_inputs->read())
+	{
+	case 0x01: return 0x15; // £1
+	case 0x02: return 0x0b; // 50p
+	case 0x04: return 0x0d; // 20p
+	case 0x08: return 0x13; // 10p
+	case 0x10: return 0x01; // 5p
+	case 0x20: return 0x1f; // £2
+	default:   return 0x00;
+	}
+}
+
 int bfm_cobra3_state::pound_tube_low_r()
 {
 	return m_pound_tube_level <= 13; // the level switch opens above £13
@@ -669,16 +713,29 @@ static INPUT_PORTS_START( bfm_cobra3 )
 	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 INPUT_PORTS_END
 
-static INPUT_PORTS_START( cobra3_payslide )
-	PORT_INCLUDE(bfm_cobra3)
-
+static INPUT_PORTS_START( cobra3_direct_coins )
 	PORT_MODIFY("IOSTATUS")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_COIN4 ) PORT_NAME("10p") PORT_IMPULSE(3)
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_COIN3 ) PORT_NAME("20p") PORT_IMPULSE(3) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(bfm_cobra3_state::coin_inserted), 20)
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_COIN2 ) PORT_NAME("50p") PORT_IMPULSE(3)
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_COIN1 ) PORT_NAME(u8"£1") PORT_IMPULSE(3) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(bfm_cobra3_state::coin_inserted), 100)
 	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_UNUSED )
+INPUT_PORTS_END
 
+static INPUT_PORTS_START( cobra3_encoded_coins )
+	PORT_MODIFY("IOSTATUS")
+	PORT_BIT( 0x1f, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_CUSTOM_MEMBER(FUNC(bfm_cobra3_state::coin_acceptor_r))
+
+	PORT_START("COINS")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_COIN1 ) PORT_NAME(u8"£1") PORT_IMPULSE(3)
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_COIN2 ) PORT_NAME("50p") PORT_IMPULSE(3)
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_COIN3 ) PORT_NAME("20p") PORT_IMPULSE(3)
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_COIN4 ) PORT_NAME("10p") PORT_IMPULSE(3)
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_COIN5 ) PORT_NAME("5p") PORT_IMPULSE(3)
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_COIN6 ) PORT_NAME(u8"£2") PORT_IMPULSE(3)
+INPUT_PORTS_END
+
+static INPUT_PORTS_START( cobra3_payslide )
 	PORT_MODIFY("STROBE2")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(FUNC(bfm_cobra3_state::pound_tube_low_r))
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(FUNC(bfm_cobra3_state::twenty_p_tube_low_r))
@@ -697,14 +754,11 @@ static INPUT_PORTS_START( cobra3_payslide )
 	PORT_ADJUSTER(100, "Initial 20p Tube Fill")
 INPUT_PORTS_END
 
-static INPUT_PORTS_START( c3_telly )
-	PORT_INCLUDE(cobra3_payslide)
-
+static INPUT_PORTS_START( cobra3_abc_controls )
 	PORT_MODIFY("STROBE0")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("A (Left)") PORT_CODE(KEYCODE_A)
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("B (Left)") PORT_CODE(KEYCODE_B)
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_NAME("C (Left)") PORT_CODE(KEYCODE_C)
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_GAMBLE_TAKE ) PORT_NAME("Collect")
 	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_START1 )
 	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_NAME("C (Right)")
 	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_NAME("B (Right)")
@@ -717,21 +771,136 @@ static INPUT_PORTS_START( c3_telly )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN )
 	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("Select") PORT_CODE(KEYCODE_S)
 	PORT_BIT( 0xe0, IP_ACTIVE_HIGH, IPT_UNKNOWN )
+INPUT_PORTS_END
 
+static INPUT_PORTS_START( cobra3_common_dils )
 	PORT_MODIFY("STROBE4")
 	PORT_DIPNAME( 0x01, 0x00, "Credit on Reset" ) PORT_DIPLOCATION("DIL:!01")
 	PORT_DIPSETTING(    0x00, "Retained" )
 	PORT_DIPSETTING(    0x01, "Lost" )
-	PORT_BIT( 0x0e, IP_ACTIVE_HIGH, IPT_UNKNOWN )
+	PORT_BIT( 0x2e, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 	PORT_DIPNAME( 0x10, 0x00, DEF_STR( Demo_Sounds ) ) PORT_DIPLOCATION("DIL:!05")
 	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x10, DEF_STR( On ) )
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 	PORT_DIPNAME( 0xc0, 0x00, "Target Percentage" ) PORT_DIPLOCATION("DIL:!07,!08")
 	PORT_DIPSETTING(    0x00, "30%" )
 	PORT_DIPSETTING(    0x40, "35%" )
 	PORT_DIPSETTING(    0x80, "40%" )
 	PORT_DIPSETTING(    0xc0, "50%" )
+INPUT_PORTS_END
+
+static INPUT_PORTS_START( cobra3_standard_dils )
+	PORT_INCLUDE(cobra3_common_dils)
+
+	PORT_MODIFY("STROBE4")
+	PORT_DIPNAME( 0x02, 0x00, "Reset Alarm" ) PORT_DIPLOCATION("DIL:!02")
+	PORT_DIPSETTING(    0x00, "Enabled" )
+	PORT_DIPSETTING(    0x02, "Disabled" )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_UNUSED )
+INPUT_PORTS_END
+
+static INPUT_PORTS_START( c3_telly )
+	PORT_INCLUDE(bfm_cobra3)
+	PORT_INCLUDE(cobra3_direct_coins)
+	PORT_INCLUDE(cobra3_payslide)
+	PORT_INCLUDE(cobra3_abc_controls)
+	PORT_INCLUDE(cobra3_common_dils)
+
+	PORT_MODIFY("STROBE0")
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_GAMBLE_TAKE ) PORT_NAME("Collect")
+INPUT_PORTS_END
+
+static INPUT_PORTS_START( c3_rtime )
+	PORT_INCLUDE(bfm_cobra3)
+	PORT_INCLUDE(cobra3_direct_coins)
+	PORT_INCLUDE(cobra3_payslide)
+	PORT_INCLUDE(cobra3_standard_dils)
+
+	PORT_MODIFY("STROBE0")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("A (Left)") PORT_CODE(KEYCODE_A)
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("B (Left)") PORT_CODE(KEYCODE_B)
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_NAME("C (Left)") PORT_CODE(KEYCODE_C)
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_BUTTON4 ) PORT_NAME("D (Left)") PORT_CODE(KEYCODE_D)
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_BUTTON8 ) PORT_NAME("D (Right)") PORT_CODE(KEYCODE_N)
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_BUTTON7 ) PORT_NAME("C (Right)") PORT_CODE(KEYCODE_V)
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_NAME("B (Right)") PORT_CODE(KEYCODE_X)
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_NAME("A (Right)") PORT_CODE(KEYCODE_Z)
+
+	PORT_MODIFY("STROBE1")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_START1 )
+	PORT_BIT( 0xfe, IP_ACTIVE_HIGH, IPT_UNUSED )
+
+	PORT_MODIFY("STROBE2")
+	PORT_BIT( 0xc0, IP_ACTIVE_HIGH, IPT_UNUSED )
+
+	PORT_MODIFY("STROBE3")
+	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNUSED )
+INPUT_PORTS_END
+
+static INPUT_PORTS_START( c3_totp )
+	PORT_INCLUDE(bfm_cobra3)
+	PORT_INCLUDE(cobra3_encoded_coins)
+	PORT_INCLUDE(cobra3_payslide)
+	PORT_INCLUDE(cobra3_abc_controls)
+	PORT_INCLUDE(cobra3_standard_dils)
+
+	PORT_MODIFY("COINS")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_COIN1 ) PORT_NAME(u8"£1") PORT_IMPULSE(3) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(bfm_cobra3_state::coin_inserted), 100)
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_COIN3 ) PORT_NAME("20p") PORT_IMPULSE(3) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(bfm_cobra3_state::coin_inserted), 20)
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_COIN4 ) PORT_NAME(u8"£2") PORT_IMPULSE(3)
+
+	PORT_MODIFY("STROBE0")
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_UNUSED )
+
+	PORT_MODIFY("STROBE1")
+	PORT_BIT( 0xe0, IP_ACTIVE_HIGH, IPT_UNUSED )
+
+	PORT_MODIFY("STROBE2")
+	PORT_BIT( 0xc0, IP_ACTIVE_HIGH, IPT_UNUSED )
+
+	PORT_MODIFY("STROBE3")
+	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNUSED )
+INPUT_PORTS_END
+
+static INPUT_PORTS_START( c3_ppays )
+	PORT_INCLUDE(bfm_cobra3)
+	PORT_INCLUDE(cobra3_encoded_coins)
+	PORT_INCLUDE(cobra3_standard_dils)
+
+	PORT_MODIFY("COINS")
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_COIN4 ) PORT_NAME(u8"£2") PORT_IMPULSE(3)
+
+	PORT_MODIFY("STROBE0")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("A (Left)") PORT_CODE(KEYCODE_A)
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("B (Left)") PORT_CODE(KEYCODE_B)
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_NAME("C (Left)") PORT_CODE(KEYCODE_C)
+	PORT_BIT( 0x38, IP_ACTIVE_HIGH, IPT_UNKNOWN )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_START1 ) PORT_NAME("Spin")
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_NAME("C (Right)")
+
+	PORT_MODIFY("STROBE1")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_NAME("B (Right)")
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON4 ) PORT_NAME("A (Right)")
+	PORT_BIT( 0xfc, IP_ACTIVE_HIGH, IPT_UNKNOWN )
+
+	PORT_MODIFY("STROBE3")
+	PORT_BIT( 0x1f, IP_ACTIVE_HIGH, IPT_UNKNOWN )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_DOOR ) PORT_NAME("Cash Door Open") PORT_CODE(KEYCODE_Y) PORT_TOGGLE
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_DOOR ) PORT_NAME("Back and Front Doors Open") PORT_CODE(KEYCODE_T) PORT_TOGGLE
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_SERVICE ) PORT_NAME("Refill/Volume Setup Mode") PORT_CODE(KEYCODE_R) PORT_TOGGLE
+
+	PORT_MODIFY("STROBE4")
+	PORT_DIPUNKNOWN_DIPLOC( 0x04, 0x00, "DIL:!03" )
+	PORT_DIPNAME( 0x08, 0x00, "Refill Mode Statistics" ) PORT_DIPLOCATION("DIL:!04")
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x08, DEF_STR( On ) )
+	PORT_DIPUNKNOWN_DIPLOC( 0x20, 0x00, "DIL:!06" )
 INPUT_PORTS_END
 
 ROM_START( c3_rtime )
@@ -831,6 +1000,6 @@ ROM_END
 
 GAMEL( 1995, c3_telly,  0, c3_telly, c3_telly, bfm_cobra3_state, empty_init, ROT0, "BFM", "Telly Addicts (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
 GAMEL( 1995, c3_tellyns, 0, c3_telly, c3_telly, bfm_cobra3_state, empty_init, ROT0, "BFM", "Telly Addicts (New Series) (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
-GAME( 1996, c3_rtime,  0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "Radio Times (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
-GAME( 1997, c3_totp,   0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "Top of the Pops (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
-GAME( 1998, c3_ppays,  0, bfm_cobra3, bfm_cobra3, bfm_cobra3_state, empty_init, ROT0, "BFM", "The Phrase That Pays (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
+GAME( 1996, c3_rtime,  0, bfm_cobra3, c3_rtime, bfm_cobra3_state, empty_init, ROT0, "BFM", "Radio Times (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
+GAME( 1997, c3_totp,   0, bfm_cobra3, c3_totp,  bfm_cobra3_state, empty_init, ROT0, "BFM", "Top of the Pops (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
+GAME( 1998, c3_ppays,  0, bfm_cobra3, c3_ppays, bfm_cobra3_state, empty_init, ROT0, "BFM", "The Phrase That Pays (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING )
