@@ -7,7 +7,9 @@ copyright-holders:MagikalUnicorn
 Control positions are reconstructed from photographs of a surviving Top of
 the Pops cabinet.  Button legends are simplified, and exact illuminated
 shades are visual estimates.  The coin acceptor follows the unit visible in
-the cabinet photographs.
+the cabinet photographs.  The upper illuminated name panel is visible in the
+photographs, but its ten output-to-section assignments and simplified logo
+treatment are reconstructions.
 -->
 <mamelayout version="2">
 	<element name="panel">
@@ -68,6 +70,21 @@ the cabinet photographs.
 			<color state="0" alpha="0.0" />
 			<color state="255" red="1.00" green="0.88" blue="0.40" alpha="0.24" />
 		</rect>
+	</element>
+	<element name="name_panel_frame">
+		<rect><color red="0.01" green="0.01" blue="0.01" /></rect>
+	</element>
+	<element name="name_panel" defstate="0">
+		<rect>
+			<color state="0" red="0.015" green="0.025" blue="0.18" />
+			<color state="255" red="0.04" green="0.18" blue="0.85" />
+		</rect>
+	</element>
+	<element name="name_label" defstate="0">
+		<text string="TOP OF THE POPS">
+			<color state="0" red="0.04" green="0.10" blue="0.30" />
+			<color state="255" red="0.90" green="0.94" blue="1.00" />
+		</text>
 	</element>
 
 	<element name="coin_acceptor_body">
@@ -210,6 +227,16 @@ the cabinet photographs.
 
 	<view name="Screen and Controls">
 		<element ref="panel"><bounds x="-144" y="-192" width="1056" height="960" /></element>
+		<element ref="name_panel_frame"><bounds x="72" y="-168" width="552" height="108" /></element>
+		<repeat count="10">
+			<param name="n" start="14" increment="1" />
+			<param name="section" start="1" increment="1" />
+			<param name="x" start="84" increment="52.8" />
+			<element id="name_panel_section_~section~" name="lamp~n~" ref="name_panel">
+				<bounds x="~x~" y="-156" width="51.8" height="84" />
+			</element>
+		</repeat>
+		<element id="name_panel_label" ref="name_label"><bounds x="96" y="-137" width="504" height="46" /></element>
 		<element ref="coin_acceptor_body"><bounds x="648" y="-168" width="240" height="138" /></element>
 		<element id="coin_acceptor_lamps" name="lamp13" ref="coin_acceptor_lamps"><bounds x="648" y="-168" width="240" height="138" /></element>
 		<element id="coin_5p_label" ref="coin_label_5p"><bounds x="648" y="-168" width="240" height="138" /></element>
@@ -295,7 +322,17 @@ the cabinet photographs.
 			{ number = 10, face = "direction_up_face", highlight = "direction_up_highlight" },
 			{ number = 11, face = "direction_down_face", highlight = "direction_down_highlight" },
 			{ number = 12, face = "select_face", highlight = "select_highlight" },
-			{ number = 13, face = "coin_acceptor_lamps" }
+			{ number = 13, face = "coin_acceptor_lamps" },
+			{ number = 14, face = "name_panel_section_1" },
+			{ number = 15, face = "name_panel_section_2" },
+			{ number = 16, face = "name_panel_section_3" },
+			{ number = 17, face = "name_panel_section_4" },
+			{ number = 18, face = "name_panel_section_5" },
+			{ number = 19, face = "name_panel_section_6" },
+			{ number = 20, face = "name_panel_section_7" },
+			{ number = 21, face = "name_panel_section_8" },
+			{ number = 22, face = "name_panel_section_9" },
+			{ number = 23, face = "name_panel_section_10" }
 		}
 		local maximum_level = 255
 		local locked_coin_state = 256
@@ -316,17 +353,26 @@ the cabinet photographs.
 			local view = file.views["Screen and Controls"]
 			local lamps = { }
 			local coin_acceptor_lamp
+			local name_panel_label = { item = view.items["name_panel_label"], level = 0 }
+			local name_panel_lamp_count = 0
 			for _, item in ipairs(lamp_items) do
 				local lamp = {
 					output = file.device:output(string.format("lamp%u", item.number)),
 					face = view.items[item.face],
-					highlight = item.highlight and view.items[item.highlight] or nil }
+					highlight = item.highlight and view.items[item.highlight] or nil,
+					name_panel = item.number >= 14 }
 				lamp.level = lamp.output:get() ~= 0 and maximum_level or 0
 				lamp.face:set_element_state_callback(state_callback(lamp))
 				if lamp.highlight then lamp.highlight:set_element_state_callback(state_callback(lamp)) end
 				if item.number == 13 then coin_acceptor_lamp = lamp end
+				if lamp.name_panel then
+					name_panel_label.level = name_panel_label.level + lamp.level
+					name_panel_lamp_count = name_panel_lamp_count + 1
+				end
 				table.insert(lamps, lamp)
 			end
+			name_panel_label.level = name_panel_label.level / name_panel_lamp_count
+			name_panel_label.item:set_element_state_callback(state_callback(name_panel_label))
 
 			local coin_labels = {
 				{ item = view.items["coin_pound_label"], output = file.device:output("coin_lockout0") },
@@ -345,6 +391,7 @@ the cabinet photographs.
 				local current_time = machine.time
 				local elapsed = (current_time - previous_time):as_double()
 				previous_time = emu.attotime(current_time)
+				local name_panel_level = 0
 				for _, lamp in ipairs(lamps) do
 					local target = lamp.output:get() ~= 0 and maximum_level or 0
 					if elapsed < 0 or elapsed > 0.25 then
@@ -354,7 +401,9 @@ the cabinet photographs.
 						lamp.level = lamp.level + (target - lamp.level) * (1.0 - math.exp(-response_scale * elapsed / response_time))
 						if math.abs(target - lamp.level) < 0.5 then lamp.level = target end
 					end
+					if lamp.name_panel then name_panel_level = name_panel_level + lamp.level end
 				end
+				name_panel_label.level = name_panel_level / name_panel_lamp_count
 			end)
 		end)
 	]]></script>

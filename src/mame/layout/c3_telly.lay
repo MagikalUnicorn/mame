@@ -7,8 +7,9 @@ copyright-holders:MagikalUnicorn
 Physical control positioning is reconstructed from photographs of a Top of
 the Pops Cobra 3 cabinet, the only known source for this cabinet layout.  The
 Telly Addicts cabinet may differ, and the button shades are visual estimates.
-The cabinet positions of the Telly and Addicts lamps are unknown; they are
-shown as diagnostic indicators at the bottom of the view.
+The ten Telly and Addicts outputs are assumed to represent five illuminated
+zones behind each half of the cabinet name panel.  The panel position, lamp
+arrangement and purple logo colour have not been confirmed.
 The coin-value text does not illuminate on the physical coin acceptor; its
 highlighting here indicates the coin-channel acceptance state for convenience.
 -->
@@ -24,14 +25,6 @@ highlighting here indicates the coin-channel acceptance state for convenience.
 		</rect>
 	</element>
 
-	<element name="lamp" defstate="0">
-		<rect state="0">
-			<color red="0.30" green="0.24" blue="0.04" />
-		</rect>
-		<rect state="1">
-			<color red="1.00" green="0.80" blue="0.10" />
-		</rect>
-	</element>
 	<element name="lamp_violet" defstate="0">
 		<rect>
 			<color red="0.01" green="0.01" blue="0.01" />
@@ -180,6 +173,23 @@ highlighting here indicates the coin-channel acceptance state for convenience.
 			<color state="0" red="1.00" green="1.00" blue="1.00" alpha="0.00" />
 			<color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.12" />
 		</rect>
+	</element>
+	<element name="name_panel_frame">
+		<rect>
+			<color red="0.01" green="0.01" blue="0.01" />
+		</rect>
+	</element>
+	<element name="name_panel" defstate="0">
+		<rect>
+			<color state="0" red="0.09" green="0.015" blue="0.13" />
+			<color state="255" red="0.58" green="0.08" blue="0.80" />
+		</rect>
+	</element>
+	<element name="name_label" defstate="0">
+		<text string="TELLY ADDICTS">
+			<color state="0" red="0.22" green="0.08" blue="0.28" />
+			<color state="255" red="0.96" green="0.90" blue="1.00" />
+		</text>
 	</element>
 	<element name="coin_acceptor_body">
 		<!-- Black moulded housing and the three recessed panel apertures. -->
@@ -445,29 +455,32 @@ highlighting here indicates the coin-channel acceptance state for convenience.
 			<color red="0.00" green="0.00" blue="0.00" />
 		</text>
 	</element>
-	<repeat count="5">
-		<param name="n" start="14" increment="1" />
-		<param name="group" start="5" increment="-1" />
-		<element name="lamp_label_~n~">
-			<text string="TELLY ~group~">
-				<color red="0.00" green="0.00" blue="0.00" />
-			</text>
-		</element>
-	</repeat>
-
-	<repeat count="5">
-		<param name="n" start="19" increment="1" />
-		<param name="group" start="5" increment="-1" />
-		<element name="lamp_label_~n~">
-			<text string="ADDICTS ~group~">
-				<color red="0.00" green="0.00" blue="0.00" />
-			</text>
-		</element>
-	</repeat>
-
 	<view name="Screen and Lamps">
 		<element ref="panel">
-			<bounds x="-144" y="-192" width="1056" height="1080" />
+			<bounds x="-144" y="-192" width="1056" height="960" />
+		</element>
+
+		<element ref="name_panel_frame">
+			<bounds x="72" y="-168" width="552" height="108" />
+		</element>
+		<repeat count="5">
+			<param name="n" start="14" increment="1" />
+			<param name="group" start="5" increment="-1" />
+			<param name="x" start="84" increment="52.8" />
+			<element id="name_panel_telly_~group~" name="lamp~n~" ref="name_panel">
+				<bounds x="~x~" y="-156" width="51.8" height="84" />
+			</element>
+		</repeat>
+		<repeat count="5">
+			<param name="n" start="19" increment="1" />
+			<param name="group" start="5" increment="-1" />
+			<param name="x" start="348" increment="52.8" />
+			<element id="name_panel_addicts_~group~" name="lamp~n~" ref="name_panel">
+				<bounds x="~x~" y="-156" width="51.8" height="84" />
+			</element>
+		</repeat>
+		<element id="name_panel_label" ref="name_label">
+			<bounds x="96" y="-137" width="504" height="46" />
 		</element>
 
 		<element ref="coin_acceptor_body">
@@ -495,10 +508,6 @@ highlighting here indicates the coin-channel acceptance state for convenience.
 		<screen index="0">
 			<bounds x="0" y="0" width="768" height="576" />
 		</screen>
-
-		<element ref="panel">
-			<bounds x="0" y="582" width="768" height="306" />
-		</element>
 
 		<element id="answer_left_a_face" name="lamp0" ref="lamp_violet" inputtag="STROBE0" inputmask="0x01">
 			<bounds x="-105" y="128" width="72" height="72" />
@@ -677,28 +686,6 @@ highlighting here indicates the coin-channel acceptance state for convenience.
 			<bounds x="716" y="674" width="76" height="14" />
 		</element>
 
-		<!-- The arrangement of these Telly and Addicts lamps is not known. -->
-		<repeat count="2">
-			<param name="n" start="14" increment="1" />
-			<param name="x" start="542" increment="77" />
-			<element name="lamp~n~" ref="lamp">
-				<bounds x="~x~" y="806" width="70" height="16" />
-			</element>
-			<element ref="lamp_label_~n~">
-				<bounds x="~x~" y="806" width="70" height="16" />
-			</element>
-		</repeat>
-
-		<repeat count="8">
-			<param name="n" start="16" increment="1" />
-			<param name="x" start="80" increment="77" />
-			<element name="lamp~n~" ref="lamp">
-				<bounds x="~x~" y="827" width="70" height="16" />
-			</element>
-			<element ref="lamp_label_~n~">
-				<bounds x="~x~" y="827" width="70" height="16" />
-			</element>
-		</repeat>
 	</view>
 
 	<view name="Screen Only">
@@ -722,7 +709,17 @@ highlighting here indicates the coin-channel acceptance state for convenience.
 			{ number = 10, face = "direction_up_face", highlight = "direction_up_highlight" },
 			{ number = 11, face = "direction_down_face", highlight = "direction_down_highlight" },
 			{ number = 12, face = "select_face", highlight = "select_highlight" },
-			{ number = 13, face = "coin_acceptor_lamps" }
+			{ number = 13, face = "coin_acceptor_lamps" },
+			{ number = 14, face = "name_panel_telly_5" },
+			{ number = 15, face = "name_panel_telly_4" },
+			{ number = 16, face = "name_panel_telly_3" },
+			{ number = 17, face = "name_panel_telly_2" },
+			{ number = 18, face = "name_panel_telly_1" },
+			{ number = 19, face = "name_panel_addicts_5" },
+			{ number = 20, face = "name_panel_addicts_4" },
+			{ number = 21, face = "name_panel_addicts_3" },
+			{ number = 22, face = "name_panel_addicts_2" },
+			{ number = 23, face = "name_panel_addicts_1" }
 		}
 		local maximum_level = 255
 		local locked_coin_state = 256
@@ -750,12 +747,15 @@ highlighting here indicates the coin-channel acceptance state for convenience.
 					local view = file.views["Screen and Lamps"]
 					local lamps = { }
 					local coin_acceptor_lamp
+					local name_panel_label = { item = view.items["name_panel_label"], level = 0 }
+					local name_panel_lamp_count = 0
 
 					for _, item in ipairs(lamp_items) do
 						local lamp = {
 							output = file.device:output(string.format("lamp%u", item.number)),
 							face = view.items[item.face],
-							highlight = item.highlight and view.items[item.highlight] or nil }
+							highlight = item.highlight and view.items[item.highlight] or nil,
+							name_panel = item.number >= 14 }
 						lamp.level = lamp.output:get() ~= 0 and maximum_level or 0
 						lamp.face:set_element_state_callback(state_callback(lamp))
 						if lamp.highlight then
@@ -764,8 +764,14 @@ highlighting here indicates the coin-channel acceptance state for convenience.
 						if item.number == 13 then
 							coin_acceptor_lamp = lamp
 						end
+						if lamp.name_panel then
+							name_panel_label.level = name_panel_label.level + lamp.level
+							name_panel_lamp_count = name_panel_lamp_count + 1
+						end
 						table.insert(lamps, lamp)
 					end
+					name_panel_label.level = name_panel_label.level / name_panel_lamp_count
+					name_panel_label.item:set_element_state_callback(state_callback(name_panel_label))
 
 					local coin_labels = {
 						{ item = view.items["coin_a_label"], lockout = file.device:output("coin_lockout0") },
@@ -783,9 +789,10 @@ highlighting here indicates the coin-channel acceptance state for convenience.
 								local current_time = machine.time
 								local elapsed = (current_time - previous_time):as_double()
 								previous_time = emu.attotime(current_time)
-								local time_discontinuity = elapsed < 0 or elapsed > 0.25
+							local time_discontinuity = elapsed < 0 or elapsed > 0.25
+							local name_panel_level = 0
 
-								for _, lamp in ipairs(lamps) do
+							for _, lamp in ipairs(lamps) do
 									local target = lamp.output:get() ~= 0 and maximum_level or 0
 									if time_discontinuity then
 										lamp.level = target
@@ -794,11 +801,15 @@ highlighting here indicates the coin-channel acceptance state for convenience.
 										local fraction = 1.0 - math.exp(-response_scale * elapsed / response_time)
 										lamp.level = lamp.level + (target - lamp.level) * fraction
 										if math.abs(target - lamp.level) < 0.5 then
-											lamp.level = target
-										end
+										lamp.level = target
 									end
 								end
-							end)
+								if lamp.name_panel then
+									name_panel_level = name_panel_level + lamp.level
+								end
+							end
+							name_panel_label.level = name_panel_level / name_panel_lamp_count
+						end)
 				end)
 	]]></script>
 </mamelayout>

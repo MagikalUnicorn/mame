@@ -8,6 +8,8 @@ No cabinet photograph is currently known for The Phrase That Pays.  Control
 positions and the coin acceptor are reconstructed from the related Cobra 3
 cabinet style.  The red, blue and green answer-button shades are inferred from
 the matching on-screen choices; their physical colours are not confirmed.
+The upper name panel, its colour, and the assignment of the three observed
+lamp outputs to equal name-panel sections are also reconstructions.
 -->
 <mamelayout version="2">
 	<element name="panel"><rect><color red="0.045" green="0.025" blue="0.015" /></rect></element>
@@ -40,6 +42,21 @@ the matching on-screen choices; their physical colours are not confirmed.
 		<rect><bounds x="0.0625" y="0.075" width="0.025" height="0.85" /><color state="0" alpha="0.0" /><color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.30" /></rect>
 		<rect><bounds x="0.075" y="0.9125" width="0.85" height="0.025" /><color state="0" alpha="0.0" /><color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.24" /></rect>
 		<rect><bounds x="0.9125" y="0.075" width="0.025" height="0.85" /><color state="0" alpha="0.0" /><color state="255" red="1.00" green="1.00" blue="1.00" alpha="0.24" /></rect>
+	</element>
+	<element name="name_panel_frame">
+		<rect><color red="0.01" green="0.01" blue="0.01" /></rect>
+	</element>
+	<element name="name_panel" defstate="0">
+		<rect>
+			<color state="0" red="0.14" green="0.025" blue="0.01" />
+			<color state="255" red="0.85" green="0.18" blue="0.03" />
+		</rect>
+	</element>
+	<element name="name_label" defstate="0">
+		<text string="THE PHRASE THAT PAYS">
+			<color state="0" red="0.30" green="0.12" blue="0.04" />
+			<color state="255" red="0.98" green="0.86" blue="0.60" />
+		</text>
 	</element>
 	<element name="label_a"><text string="A"><color red="0.00" green="0.00" blue="0.00" /></text></element>
 	<element name="label_b"><text string="B"><color red="0.00" green="0.00" blue="0.00" /></text></element>
@@ -102,6 +119,16 @@ the matching on-screen choices; their physical colours are not confirmed.
 
 	<view name="Screen and Controls">
 		<element ref="panel"><bounds x="-144" y="-192" width="1056" height="960" /></element>
+		<element ref="name_panel_frame"><bounds x="72" y="-168" width="552" height="108" /></element>
+		<repeat count="3">
+			<param name="n" start="21" increment="1" />
+			<param name="section" start="1" increment="1" />
+			<param name="x" start="84" increment="176.333" />
+			<element id="name_panel_section_~section~" name="lamp~n~" ref="name_panel">
+				<bounds x="~x~" y="-156" width="175.333" height="84" />
+			</element>
+		</repeat>
+		<element id="name_panel_label" ref="name_label"><bounds x="96" y="-137" width="504" height="46" /></element>
 		<element ref="coin_acceptor_body"><bounds x="648" y="-168" width="240" height="138" /></element>
 		<element id="coin_acceptor_lamps" name="lamp10" ref="coin_acceptor_lamps"><bounds x="648" y="-168" width="240" height="138" /></element>
 		<element id="coin_5p_label" ref="coin_label_5p"><bounds x="648" y="-168" width="240" height="138" /></element>
@@ -143,7 +170,10 @@ the matching on-screen choices; their physical colours are not confirmed.
 			{ number = 8, face = "answer_right_b_face", highlight = "answer_right_b_highlight" },
 			{ number = 7, face = "answer_right_c_face", highlight = "answer_right_c_highlight" },
 			{ number = 6, face = "spin_face", highlight = "spin_highlight" },
-			{ number = 10, face = "coin_acceptor_lamps" }
+			{ number = 10, face = "coin_acceptor_lamps" },
+			{ number = 21, face = "name_panel_section_1" },
+			{ number = 22, face = "name_panel_section_2" },
+			{ number = 23, face = "name_panel_section_3" }
 		}
 		local maximum_level = 255
 		local locked_coin_state = 256
@@ -161,14 +191,22 @@ the matching on-screen choices; their physical colours are not confirmed.
 			local view = file.views["Screen and Controls"]
 			local lamps = { }
 			local coin_acceptor_lamp
+			local name_panel_label = { item = view.items["name_panel_label"], level = 0 }
+			local name_panel_lamp_count = 0
 			for _, item in ipairs(lamp_items) do
-				local lamp = { output = file.device:output(string.format("lamp%u", item.number)), face = view.items[item.face], highlight = item.highlight and view.items[item.highlight] or nil }
+				local lamp = { output = file.device:output(string.format("lamp%u", item.number)), face = view.items[item.face], highlight = item.highlight and view.items[item.highlight] or nil, name_panel = item.number >= 21 }
 				lamp.level = lamp.output:get() ~= 0 and maximum_level or 0
 				lamp.face:set_element_state_callback(state_callback(lamp))
 				if lamp.highlight then lamp.highlight:set_element_state_callback(state_callback(lamp)) end
 				if item.number == 10 then coin_acceptor_lamp = lamp end
+				if lamp.name_panel then
+					name_panel_label.level = name_panel_label.level + lamp.level
+					name_panel_lamp_count = name_panel_lamp_count + 1
+				end
 				table.insert(lamps, lamp)
 			end
+			name_panel_label.level = name_panel_label.level / name_panel_lamp_count
+			name_panel_label.item:set_element_state_callback(state_callback(name_panel_label))
 
 			local coin_labels = {
 				{ item = view.items["coin_pound_label"], output = file.device:output("coin_lockout0") },
@@ -187,6 +225,7 @@ the matching on-screen choices; their physical colours are not confirmed.
 				local current_time = machine.time
 				local elapsed = (current_time - previous_time):as_double()
 				previous_time = emu.attotime(current_time)
+				local name_panel_level = 0
 				for _, lamp in ipairs(lamps) do
 					local target = lamp.output:get() ~= 0 and maximum_level or 0
 					if elapsed < 0 or elapsed > 0.25 then lamp.level = target
@@ -195,7 +234,9 @@ the matching on-screen choices; their physical colours are not confirmed.
 						lamp.level = lamp.level + (target - lamp.level) * (1.0 - math.exp(-response_scale * elapsed / response_time))
 						if math.abs(target - lamp.level) < 0.5 then lamp.level = target end
 					end
+					if lamp.name_panel then name_panel_level = name_panel_level + lamp.level end
 				end
+				name_panel_label.level = name_panel_level / name_panel_lamp_count
 			end)
 		end)
 	]]></script>

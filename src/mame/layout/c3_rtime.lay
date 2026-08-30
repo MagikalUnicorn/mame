@@ -68,7 +68,12 @@ arrangement has not been confirmed.
 			<color state="255" red="0.85" green="0.04" blue="0.025" />
 		</rect>
 	</element>
-	<element name="name_label"><text string="RADIO TIMES"><color red="0.96" green="0.92" blue="0.72" /></text></element>
+	<element name="name_label" defstate="0">
+		<text string="RADIO TIMES">
+			<color state="0" red="0.30" green="0.12" blue="0.04" />
+			<color state="255" red="0.96" green="0.92" blue="0.72" />
+		</text>
+	</element>
 
 	<element name="coin_acceptor_body">
 		<rect><color red="0.015" green="0.015" blue="0.015" /></rect>
@@ -125,9 +130,9 @@ arrangement has not been confirmed.
 	<view name="Screen and Controls">
 		<element ref="panel"><bounds x="-144" y="-192" width="1056" height="960" /></element>
 		<element ref="name_panel_frame"><bounds x="72" y="-168" width="552" height="108" /></element>
-		<element id="name_panel_left" name="lamp14" ref="name_panel"><bounds x="84" y="-156" width="264" height="84" /></element>
-		<element id="name_panel_right" name="lamp16" ref="name_panel"><bounds x="348" y="-156" width="264" height="84" /></element>
-		<element ref="name_label"><bounds x="96" y="-137" width="504" height="46" /></element>
+		<element id="name_panel_left" name="lamp14" ref="name_panel"><bounds x="84" y="-156" width="263.5" height="84" /></element>
+		<element id="name_panel_right" name="lamp16" ref="name_panel"><bounds x="348.5" y="-156" width="263.5" height="84" /></element>
+		<element id="name_panel_label" ref="name_label"><bounds x="96" y="-137" width="504" height="46" /></element>
 		<element ref="coin_acceptor_body"><bounds x="648" y="-168" width="240" height="138" /></element>
 		<element id="coin_acceptor_lamps" name="lamp13" ref="coin_acceptor_lamps"><bounds x="648" y="-168" width="240" height="138" /></element>
 		<element id="coin_10p_label" ref="coin_label_10p"><bounds x="648" y="-168" width="240" height="138" /></element>
@@ -138,22 +143,22 @@ arrangement has not been confirmed.
 		<screen index="0"><bounds x="0" y="0" width="768" height="576" /></screen>
 
 		<param name="id" value="answer_left_a" /><param name="lamp" value="0" /><param name="tag" value="STROBE0" /><param name="mask" value="0x01" /><param name="label" value="a" /><param name="colour" value="orange" /><param name="red" value="0.90" /><param name="green" value="0.48" /><param name="blue" value="0.22" /><param name="label_y" value="0" /><param name="label_height" value="1" />
-		<group ref="button"><bounds x="-105" y="74" width="72" height="72" /></group>
+		<group ref="button"><bounds x="-105" y="189" width="72" height="72" /></group>
 		<param name="id" value="answer_left_b" /><param name="lamp" value="1" /><param name="mask" value="0x02" /><param name="label" value="b" /><param name="colour" value="blue" /><param name="red" value="0.35" /><param name="green" value="0.48" /><param name="blue" value="0.75" />
-		<group ref="button"><bounds x="-105" y="198" width="72" height="72" /></group>
+		<group ref="button"><bounds x="-105" y="293" width="72" height="72" /></group>
 		<param name="id" value="answer_left_c" /><param name="lamp" value="2" /><param name="mask" value="0x04" /><param name="label" value="c" /><param name="colour" value="red" /><param name="red" value="0.72" /><param name="green" value="0.35" /><param name="blue" value="0.35" />
-		<group ref="button"><bounds x="-105" y="322" width="72" height="72" /></group>
+		<group ref="button"><bounds x="-105" y="397" width="72" height="72" /></group>
 		<param name="id" value="answer_left_d" /><param name="lamp" value="12" /><param name="mask" value="0x08" /><param name="label" value="d" /><param name="colour" value="green" /><param name="red" value="0.35" /><param name="green" value="0.72" /><param name="blue" value="0.40" />
-		<group ref="button"><bounds x="-105" y="446" width="72" height="72" /></group>
+		<group ref="button"><bounds x="-105" y="501" width="72" height="72" /></group>
 
 		<param name="id" value="answer_right_a" /><param name="lamp" value="7" /><param name="mask" value="0x80" /><param name="label" value="a" /><param name="colour" value="orange" /><param name="red" value="0.90" /><param name="green" value="0.48" /><param name="blue" value="0.22" />
-		<group ref="button"><bounds x="801" y="74" width="72" height="72" /></group>
+		<group ref="button"><bounds x="801" y="189" width="72" height="72" /></group>
 		<param name="id" value="answer_right_b" /><param name="lamp" value="6" /><param name="mask" value="0x40" /><param name="label" value="b" /><param name="colour" value="blue" /><param name="red" value="0.35" /><param name="green" value="0.48" /><param name="blue" value="0.75" />
-		<group ref="button"><bounds x="801" y="198" width="72" height="72" /></group>
+		<group ref="button"><bounds x="801" y="293" width="72" height="72" /></group>
 		<param name="id" value="answer_right_c" /><param name="lamp" value="5" /><param name="mask" value="0x20" /><param name="label" value="c" /><param name="colour" value="red" /><param name="red" value="0.72" /><param name="green" value="0.35" /><param name="blue" value="0.35" />
-		<group ref="button"><bounds x="801" y="322" width="72" height="72" /></group>
+		<group ref="button"><bounds x="801" y="397" width="72" height="72" /></group>
 		<param name="id" value="answer_right_d" /><param name="lamp" value="4" /><param name="mask" value="0x10" /><param name="label" value="d" /><param name="colour" value="green" /><param name="red" value="0.35" /><param name="green" value="0.72" /><param name="blue" value="0.40" />
-		<group ref="button"><bounds x="801" y="446" width="72" height="72" /></group>
+		<group ref="button"><bounds x="801" y="501" width="72" height="72" /></group>
 
 		<param name="id" value="start" /><param name="lamp" value="3" /><param name="tag" value="STROBE1" /><param name="mask" value="0x01" /><param name="label" value="start" /><param name="colour" value="yellow" /><param name="red" value="0.88" /><param name="green" value="0.72" /><param name="blue" value="0.30" /><param name="label_y" value="0.37" /><param name="label_height" value="0.26" />
 		<group ref="button"><bounds x="716" y="653" width="76" height="56" /></group>
@@ -192,14 +197,22 @@ arrangement has not been confirmed.
 			local view = file.views["Screen and Controls"]
 			local lamps = { }
 			local coin_acceptor_lamp
+			local name_panel_label = { item = view.items["name_panel_label"], level = 0 }
+			local name_panel_lamp_count = 0
 			for _, item in ipairs(lamp_items) do
-				local lamp = { output = file.device:output(string.format("lamp%u", item.number)), face = view.items[item.face], highlight = item.highlight and view.items[item.highlight] or nil }
+				local lamp = { output = file.device:output(string.format("lamp%u", item.number)), face = view.items[item.face], highlight = item.highlight and view.items[item.highlight] or nil, name_panel = item.number == 14 or item.number == 16 }
 				lamp.level = lamp.output:get() ~= 0 and maximum_level or 0
 				lamp.face:set_element_state_callback(state_callback(lamp))
 				if lamp.highlight then lamp.highlight:set_element_state_callback(state_callback(lamp)) end
 				if item.number == 13 then coin_acceptor_lamp = lamp end
+				if lamp.name_panel then
+					name_panel_label.level = name_panel_label.level + lamp.level
+					name_panel_lamp_count = name_panel_lamp_count + 1
+				end
 				table.insert(lamps, lamp)
 			end
+			name_panel_label.level = name_panel_label.level / name_panel_lamp_count
+			name_panel_label.item:set_element_state_callback(state_callback(name_panel_label))
 
 			local coin_labels = {
 				{ item = view.items["coin_pound_label"], output = file.device:output("coin_lockout0") },
@@ -216,6 +229,7 @@ arrangement has not been confirmed.
 				local current_time = machine.time
 				local elapsed = (current_time - previous_time):as_double()
 				previous_time = emu.attotime(current_time)
+				local name_panel_level = 0
 				for _, lamp in ipairs(lamps) do
 					local target = lamp.output:get() ~= 0 and maximum_level or 0
 					if elapsed < 0 or elapsed > 0.25 then lamp.level = target
@@ -224,7 +238,9 @@ arrangement has not been confirmed.
 						lamp.level = lamp.level + (target - lamp.level) * (1.0 - math.exp(-response_scale * elapsed / response_time))
 						if math.abs(target - lamp.level) < 0.5 then lamp.level = target end
 					end
+					if lamp.name_panel then name_panel_level = name_panel_level + lamp.level end
 				end
+				name_panel_label.level = name_panel_level / name_panel_lamp_count
 			end)
 		end)
 	]]></script>
