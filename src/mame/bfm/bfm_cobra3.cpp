@@ -70,6 +70,7 @@
 #include "machine/nvram.h"
 #include "machine/rescap.h"
 #include "machine/scc66470.h"
+#include "machine/ticket.h"
 #include "machine/watchdog.h"
 #include "sound/flt_vol.h"
 #include "sound/tms320av110.h"
@@ -98,6 +99,7 @@ public:
 	bfm_cobra3_state(const machine_config &mconfig, device_type type, const char *tag) ATTR_COLD;
 
 	void bfm_cobra3(machine_config &config) ATTR_COLD;
+	void c3_ppays(machine_config &config) ATTR_COLD;
 	void c3_telly(machine_config &config) ATTR_COLD;
 
 	int meter_sense_r();
@@ -118,6 +120,7 @@ private:
 	void lamp_port_a_w(u8 data);
 	void update_meters(u16 data);
 	void cabinet_outputs_w(u16 data);
+	void external_outputs_w(u16 data, u16 mem_mask);
 	void update_coin_lockouts(u8 enables);
 
 	void volume_control(bool direction, bool clock);
@@ -161,8 +164,10 @@ private:
 	optional_ioport m_coin_inputs;
 	optional_ioport_array<2> m_initial_tube_fill;
 	required_device<meters_device> m_meters;
+	optional_device<hopper_device> m_hopper;
 	output_finder<24> m_lamps;
 	output_finder<5> m_coin_lockouts;
+	output_finder<> m_cashbox_diverter;
 
 	u8 m_active_strobe = 0;
 	bool m_vol_clock = false;
@@ -171,6 +176,7 @@ private:
 	u8 m_lamp_port_a = 0;
 	u8 m_meter_latch = 0;
 	u8 m_triac_latch = 0;
+	u16 m_external_output_latch = 0;
 	u8 m_pound_tube_level = 0;
 	u8 m_twenty_p_tube_level = 0;
 	bool m_tube_levels_initialized = false;
@@ -196,8 +202,10 @@ bfm_cobra3_state::bfm_cobra3_state(const machine_config &mconfig, device_type ty
 	, m_coin_inputs(*this, "COINS")
 	, m_initial_tube_fill(*this, "TUBE%u", 0U)
 	, m_meters(*this, "meters")
+	, m_hopper(*this, "hopper")
 	, m_lamps(*this, "lamp%u", 0U)
 	, m_coin_lockouts(*this, "coin_lockout%u", 0U)
+	, m_cashbox_diverter(*this, "cashbox_diverter")
 {
 }
 
@@ -243,6 +251,24 @@ void bfm_cobra3_state::cabinet_outputs_w(u16 data)
 		m_twenty_p_tube_level--;
 	if (BIT(rising, 2) && m_pound_tube_level) // triac C: £1 payslide
 		m_pound_tube_level--;
+}
+
+void bfm_cobra3_state::external_outputs_w(u16 data, u16 mem_mask)
+{
+	COMBINE_DATA(&m_external_output_latch);
+
+	if (m_hopper)
+	{
+		// TPTP asserts bits 1 and 3 together when the recorded £1 hopper level reaches its £70 float.
+		// Assume these operate a coin diverter that sends further £1 coins to the cash box.
+		m_cashbox_diverter = (m_external_output_latch & 0x000a) == 0x000a;
+		if (m_external_output_latch & ~0x000a)
+			LOGMASKED(LOG_UNKNOWN, "%s: unimplemented external output data %04x mask %04x\n", machine().describe_context(), data, mem_mask);
+	}
+	else
+	{
+		LOGMASKED(LOG_UNKNOWN, "%s: unimplemented external output data %04x mask %04x\n", machine().describe_context(), data, mem_mask);
+	}
 }
 
 void bfm_cobra3_state::update_coin_lockouts(u8 enables)
@@ -324,6 +350,12 @@ u16 bfm_cobra3_state::io_r(offs_t offset, u16 mem_mask)
 				return m_ramdac->pal_r();
 			break;
 
+		case 0x800: // external cabinet inputs
+			if (m_hopper)
+				return m_hopper->line_r() ? 0 : 0x0002;
+			LOGMASKED(LOG_UNKNOWN, "%s: unknown external input read offset %08x mask %04x\n", machine().describe_context(), offset * 2, mem_mask);
+			break;
+
 		default:
 			LOGMASKED(LOG_UNKNOWN, "%s: unknown I/O read offset %08x mask %04x\n", machine().describe_context(), offset * 2, mem_mask);
 			break;
@@ -394,8 +426,24 @@ void bfm_cobra3_state::io_w(offs_t offset, u16 data, u16 mem_mask)
 			}
 			break;
 
+		case 0x900: // external cabinet outputs
+			external_outputs_w(data, mem_mask);
+			break;
+
+		case 0xa00: // external cabinet outputs
+		{
+			u16 handled = 0;
+			if (m_hopper && ACCESSING_BITS_0_7)
+			{
+				m_hopper->motor_w(BIT(data, 5));
+				handled = 0x0020;
+			}
+			if (mem_mask & ~handled)
+				LOGMASKED(LOG_UNKNOWN, "%s: unimplemented external output write offset %08x data %04x mask %04x\n", machine().describe_context(), offset * 2, data, mem_mask);
+			break;
+		}
+
 		default:
-			// The Phrase That Pays uses the 0x900 and 0xa00 blocks for unimplemented coin-handling outputs.
 			LOGMASKED(LOG_UNKNOWN, "%s: unknown I/O write offset %08x data %04x mask %04x\n", machine().describe_context(), offset * 2, data, mem_mask);
 			break;
 	}
@@ -544,6 +592,7 @@ void bfm_cobra3_state::machine_start()
 	save_item(NAME(m_lamp_port_a));
 	save_item(NAME(m_meter_latch));
 	save_item(NAME(m_triac_latch));
+	save_item(NAME(m_external_output_latch));
 	save_item(NAME(m_pound_tube_level));
 	save_item(NAME(m_twenty_p_tube_level));
 	save_item(NAME(m_tube_levels_initialized));
@@ -632,6 +681,14 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	// TODO: Confirm the R/C values against Cobra 3 hardware.
 	WATCHDOG_TIMER(config, m_watchdog).set_time(PERIOD_OF_555_MONOSTABLE(RES_K(120), CAP_N(100)));
 	METERS(config, m_meters).set_number(4);
+}
+
+void bfm_cobra3_state::c3_ppays(machine_config &config)
+{
+	bfm_cobra3(config);
+
+	// TODO: Verify the hopper pulse period against the cabinet hardware.
+	HOPPER(config, m_hopper, attotime::from_msec(100));
 }
 
 void bfm_cobra3_state::c3_telly(machine_config &config)
@@ -1005,4 +1062,4 @@ GAMEL( 1995, c3_telly,  0, c3_telly, c3_telly, bfm_cobra3_state, empty_init, ROT
 GAMEL( 1995, c3_tellyns, 0, c3_telly, c3_telly, bfm_cobra3_state, empty_init, ROT0, "BFM", "Telly Addicts (New Series) (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_telly )
 GAMEL( 1996, c3_rtime,  0, bfm_cobra3, c3_rtime, bfm_cobra3_state, empty_init, ROT0, "BFM", "Radio Times (Bellfruit) (Cobra 3)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_rtime )
 GAMEL( 1997, c3_totp,   0, bfm_cobra3, c3_totp,  bfm_cobra3_state, empty_init, ROT0, "BFM", "Top of the Pops (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_totp )
-GAMEL( 1998, c3_ppays,  0, bfm_cobra3, c3_ppays, bfm_cobra3_state, empty_init, ROT0, "BFM", "The Phrase That Pays (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_ppays )
+GAMEL( 1998, c3_ppays,  0, c3_ppays, c3_ppays, bfm_cobra3_state, empty_init, ROT0, "BFM", "The Phrase That Pays (Bellfruit) (Cobra 3?)", MACHINE_IMPERFECT_GRAPHICS | MACHINE_NOT_WORKING, layout_c3_ppays )
