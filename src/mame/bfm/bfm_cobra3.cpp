@@ -117,12 +117,11 @@ private:
 	void update_diverters();
 	void lamp_latch_w(u16 data, u16 mem_mask);
 	void lamp_port_a_w(u8 data);
-	void update_meters(u16 data);
-	void cabinet_outputs_w(u16 data);
-	void diverter_outputs_w(u16 data, u16 mem_mask);
-	void update_coin_lockouts(u8 enables);
+	void output_latch_w(u16 data, u16 mem_mask);
+	void coin_lockouts_w(u8 enables);
+	void diverter_latch_w(u16 data, u16 mem_mask);
 
-	void volume_control(bool direction, bool clock);
+	void volume_step(bool direction);
 	void av110_reset_strobe_w(u8 data);
 
 	u16 io_r(offs_t offset, u16 mem_mask);
@@ -169,12 +168,10 @@ private:
 	output_finder<4> m_diverters;
 
 	u8 m_active_strobe = 0;
-	bool m_vol_clock = false;
 	u8 m_volume = 0;
 	u16 m_lamp_latch = 0;
 	u8 m_lamp_port_a = 0;
-	u8 m_meter_latch = 0;
-	u8 m_triac_latch = 0;
+	u16 m_output_latch = 0;
 	u16 m_diverter_latch = 0;
 	u8 m_pound_tube_level = 0;
 	u8 m_twenty_p_tube_level = 0;
@@ -235,30 +232,38 @@ void bfm_cobra3_state::lamp_port_a_w(u8 data)
 	update_lamps();
 }
 
-void bfm_cobra3_state::update_meters(u16 data)
+void bfm_cobra3_state::output_latch_w(u16 data, u16 mem_mask)
 {
-	m_meter_latch = data & 0x0f;
+	// This address selects one shared 16-bit latch, including on byte writes.
+	u16 const previous = m_output_latch;
+	COMBINE_DATA(&m_output_latch);
 
 	for (unsigned i = 0; i < 4; i++)
-		m_meters->update(i, BIT(m_meter_latch, i));
+		m_meters->update(i, BIT(m_output_latch, i));
+
+	if (m_initial_tube_fill[0].found() && m_initial_tube_fill[1].found() && BIT(m_strobein[2]->read(), 2))
+	{
+		u8 const rising = BIT(m_output_latch, 4, 3) & ~BIT(previous, 4, 3);
+
+		if (BIT(rising, 0) && m_twenty_p_tube_level) // triac A: 20p payslide
+			m_twenty_p_tube_level--;
+		if (BIT(rising, 2) && m_pound_tube_level) // triac C: £1 payslide
+			m_pound_tube_level--;
+	}
+
+	if (BIT(previous, 15) && !BIT(m_output_latch, 15))
+		volume_step(BIT(m_output_latch, 7));
+
+	m_watchdog->reset_line_w(BIT(m_output_latch, 8));
+
+	for (unsigned i = 0; i < 5; i++)
+	{
+		if (BIT(m_output_latch, i + 10))
+			m_active_strobe = i;
+	}
 }
 
-void bfm_cobra3_state::cabinet_outputs_w(u16 data)
-{
-	u8 const triacs = BIT(data, 4, 3);
-	u8 const rising = triacs & ~m_triac_latch;
-	m_triac_latch = triacs;
-
-	if (!BIT(m_strobein[2]->read(), 2))
-		return;
-
-	if (BIT(rising, 0) && m_twenty_p_tube_level) // triac A: 20p payslide
-		m_twenty_p_tube_level--;
-	if (BIT(rising, 2) && m_pound_tube_level) // triac C: £1 payslide
-		m_pound_tube_level--;
-}
-
-void bfm_cobra3_state::diverter_outputs_w(u16 data, u16 mem_mask)
+void bfm_cobra3_state::diverter_latch_w(u16 data, u16 mem_mask)
 {
 	COMBINE_DATA(&m_diverter_latch);
 	update_diverters();
@@ -277,7 +282,7 @@ void bfm_cobra3_state::diverter_outputs_w(u16 data, u16 mem_mask)
 	}
 }
 
-void bfm_cobra3_state::update_coin_lockouts(u8 enables)
+void bfm_cobra3_state::coin_lockouts_w(u8 enables)
 {
 	bool const lockouts[] =
 	{
@@ -299,13 +304,8 @@ void bfm_cobra3_state::update_coin_lockouts(u8 enables)
 		machine().bookkeeping().coin_lockout_w(3, false);
 }
 
-void bfm_cobra3_state::volume_control(bool direction, bool clock)
+void bfm_cobra3_state::volume_step(bool direction)
 {
-	bool const falling_edge = m_vol_clock && !clock;
-	m_vol_clock = clock;
-	if (!falling_edge)
-		return;
-
 	if (!direction)
 	{
 		if (m_volume < 31)
@@ -359,11 +359,13 @@ u16 bfm_cobra3_state::io_r(offs_t offset, u16 mem_mask)
 		case 0x800: // Phrase That Pays hopper opto inputs
 			if (m_hopper)
 				return m_hopper->line_r() ? 0 : 0x0002;
-			LOGMASKED(LOG_UNKNOWN, "%s: unknown 0x800 input read offset %08x mask %04x\n", machine().describe_context(), offset * 2, mem_mask);
+			if (!machine().side_effects_disabled())
+				LOGMASKED(LOG_UNKNOWN, "%s: unknown 0x800 input read offset %08x mask %04x\n", machine().describe_context(), offset * 2, mem_mask);
 			break;
 
 		default:
-			LOGMASKED(LOG_UNKNOWN, "%s: unknown I/O read offset %08x mask %04x\n", machine().describe_context(), offset * 2, mem_mask);
+			if (!machine().side_effects_disabled())
+				LOGMASKED(LOG_UNKNOWN, "%s: unknown I/O read offset %08x mask %04x\n", machine().describe_context(), offset * 2, mem_mask);
 			break;
 	}
 
@@ -382,20 +384,11 @@ void bfm_cobra3_state::io_w(offs_t offset, u16 data, u16 mem_mask)
 
 		case 0x100:
 			if (ACCESSING_BITS_8_15)
-				update_coin_lockouts(data >> 8);
+				coin_lockouts_w(data >> 8);
 			break;
 
 		case 0x200:
-			update_meters(data);
-			cabinet_outputs_w(data);
-			volume_control(BIT(data, 7), BIT(data, 15));
-			m_watchdog->reset_line_w(BIT(data, 8));
-
-			for (unsigned i = 0; i < 5; i++)
-			{
-				if (BIT(data, i + 10))
-					m_active_strobe = i;
-			}
+			output_latch_w(data, mem_mask);
 			break;
 
 		case 0x300:
@@ -433,18 +426,15 @@ void bfm_cobra3_state::io_w(offs_t offset, u16 data, u16 mem_mask)
 			break;
 
 		case 0x900: // coin diverter outputs
-			diverter_outputs_w(data, mem_mask);
+			diverter_latch_w(data, mem_mask);
 			break;
 
 		case 0xa00: // hopper drive outputs
 		{
-			u16 handled = 0;
+			u16 const handled = m_hopper ? 0x0020 : 0x0000;
 			if (m_hopper && ACCESSING_BITS_0_7)
-			{
 				m_hopper->motor_w(BIT(data, 5));
-				handled = 0x0020;
-			}
-			if (mem_mask & ~handled)
+			if (data & mem_mask & ~handled)
 				LOGMASKED(LOG_UNKNOWN, "%s: unimplemented hopper drive output write offset %08x data %04x mask %04x\n", machine().describe_context(), offset * 2, data, mem_mask);
 			break;
 		}
@@ -462,7 +452,7 @@ u16 bfm_cobra3_state::mem_r(offs_t offset, u16 mem_mask)
 	switch (cs)
 	{
 		case 1: // ROM
-			return m_cpuregion[offset & 0x7ffff];
+			return m_cpuregion[offset & (m_cpuregion.length() - 1)];
 
 		case 2: // NVRAM
 			return m_mainram[offset & (m_mainram.length() - 1)];
@@ -476,7 +466,8 @@ u16 bfm_cobra3_state::mem_r(offs_t offset, u16 mem_mask)
 			break;
 
 		default:
-			LOGMASKED(LOG_UNKNOWN, "%s: unknown read offset %08x mask %04x CS%d\n", machine().describe_context(), offset * 2, mem_mask, cs);
+			if (!machine().side_effects_disabled())
+				LOGMASKED(LOG_UNKNOWN, "%s: unknown read offset %08x mask %04x CS%d\n", machine().describe_context(), offset * 2, mem_mask, cs);
 			break;
 	}
 
@@ -588,16 +579,18 @@ void bfm_cobra3_state::scc66470_map(address_map &map)
 
 void bfm_cobra3_state::machine_start()
 {
+	// Address-line mirroring below uses the allocation length as a mask.
+	assert(std::has_single_bit(m_cpuregion.length()));
+	assert(std::has_single_bit(m_mainram.length()));
+
 	m_scc_line_buffer = std::make_unique<u8[]>(m_screen->visible_area().width());
 	m_sti_line_buffer = std::make_unique<u32[]>(m_screen->visible_area().width());
 
 	save_item(NAME(m_active_strobe));
-	save_item(NAME(m_vol_clock));
 	save_item(NAME(m_volume));
 	save_item(NAME(m_lamp_latch));
 	save_item(NAME(m_lamp_port_a));
-	save_item(NAME(m_meter_latch));
-	save_item(NAME(m_triac_latch));
+	save_item(NAME(m_output_latch));
 	save_item(NAME(m_diverter_latch));
 	save_item(NAME(m_pound_tube_level));
 	save_item(NAME(m_twenty_p_tube_level));
@@ -721,13 +714,13 @@ ioport_value bfm_cobra3_state::coin_acceptor_r()
 	// The later Cobra games decode six denominations from five acceptor lines.
 	switch (m_coin_inputs->read())
 	{
-	case 0x01: return 0x15; // £1
-	case 0x02: return 0x0b; // 50p
-	case 0x04: return 0x0d; // 20p
-	case 0x08: return 0x13; // 10p
-	case 0x10: return 0x01; // 5p
-	case 0x20: return 0x1f; // £2
-	default:   return 0x00;
+		case 0x01: return 0x15; // £1
+		case 0x02: return 0x0b; // 50p
+		case 0x04: return 0x0d; // 20p
+		case 0x08: return 0x13; // 10p
+		case 0x10: return 0x01; // 5p
+		case 0x20: return 0x1f; // £2
+		default:   return 0x00;
 	}
 }
 
