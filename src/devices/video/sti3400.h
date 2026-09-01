@@ -11,6 +11,8 @@
 class sti3400_device : public device_t
 {
 public:
+	static constexpr feature_type imperfect_features() { return feature::TIMING; }
+
 	sti3400_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock = 0) ATTR_COLD;
 
 	void set_dram_size(u32 bytes) { m_dram_size = bytes; }
