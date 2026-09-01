@@ -4,8 +4,6 @@
 /* Bellfruit SWP (Skill With Prizes) Video hardware
     aka Cobra 3
 
-   MPEG video and audio decoding are preliminary.
-
    Telly Addicts user notes:
    - Blank NVRAM produces a RAM ERROR on every startup.  Setting the stored
      volume does not clear this error, but it does not prevent the game from
@@ -116,11 +114,12 @@ private:
 	static constexpr unsigned NVRAM_BYTES = 16 * 1024;
 
 	void update_lamps();
+	void update_diverters();
 	void lamp_latch_w(u16 data, u16 mem_mask);
 	void lamp_port_a_w(u8 data);
 	void update_meters(u16 data);
 	void cabinet_outputs_w(u16 data);
-	void external_outputs_w(u16 data, u16 mem_mask);
+	void diverter_outputs_w(u16 data, u16 mem_mask);
 	void update_coin_lockouts(u8 enables);
 
 	void volume_control(bool direction, bool clock);
@@ -167,7 +166,7 @@ private:
 	optional_device<hopper_device> m_hopper;
 	output_finder<24> m_lamps;
 	output_finder<5> m_coin_lockouts;
-	output_finder<> m_cashbox_diverter;
+	output_finder<4> m_diverters;
 
 	u8 m_active_strobe = 0;
 	bool m_vol_clock = false;
@@ -176,7 +175,7 @@ private:
 	u8 m_lamp_port_a = 0;
 	u8 m_meter_latch = 0;
 	u8 m_triac_latch = 0;
-	u16 m_external_output_latch = 0;
+	u16 m_diverter_latch = 0;
 	u8 m_pound_tube_level = 0;
 	u8 m_twenty_p_tube_level = 0;
 	bool m_tube_levels_initialized = false;
@@ -205,7 +204,7 @@ bfm_cobra3_state::bfm_cobra3_state(const machine_config &mconfig, device_type ty
 	, m_hopper(*this, "hopper")
 	, m_lamps(*this, "lamp%u", 0U)
 	, m_coin_lockouts(*this, "coin_lockout%u", 0U)
-	, m_cashbox_diverter(*this, "cashbox_diverter")
+	, m_diverters(*this, "diverter%u", 0U)
 {
 }
 
@@ -216,6 +215,12 @@ void bfm_cobra3_state::update_lamps()
 
 	for (unsigned i = 0; i < 8; i++)
 		m_lamps[16 + i] = BIT(m_lamp_port_a, i);
+}
+
+void bfm_cobra3_state::update_diverters()
+{
+	for (unsigned i = 0; i < 4; i++)
+		m_diverters[i] = m_hopper && BIT(m_diverter_latch, i);
 }
 
 void bfm_cobra3_state::lamp_latch_w(u16 data, u16 mem_mask)
@@ -253,21 +258,22 @@ void bfm_cobra3_state::cabinet_outputs_w(u16 data)
 		m_pound_tube_level--;
 }
 
-void bfm_cobra3_state::external_outputs_w(u16 data, u16 mem_mask)
+void bfm_cobra3_state::diverter_outputs_w(u16 data, u16 mem_mask)
 {
-	COMBINE_DATA(&m_external_output_latch);
+	COMBINE_DATA(&m_diverter_latch);
+	update_diverters();
 
 	if (m_hopper)
 	{
-		// TPTP asserts bits 1 and 3 together when the recorded £1 hopper level reaches its £70 float.
-		// Assume these operate a coin diverter that sends further £1 coins to the cash box.
-		m_cashbox_diverter = (m_external_output_latch & 0x000a) == 0x000a;
-		if (m_external_output_latch & ~0x000a)
-			LOGMASKED(LOG_UNKNOWN, "%s: unimplemented external output data %04x mask %04x\n", machine().describe_context(), data, mem_mask);
+		// TPTP calls bits 0-3 Divert 0-3.  It asserts 1 and 3 together once the
+		// recorded £1 hopper level reaches its £70 float, apparently routing
+		// further £1 coins to the cash box.
+		if (m_diverter_latch & ~0x000f)
+			LOGMASKED(LOG_UNKNOWN, "%s: unimplemented diverter output data %04x mask %04x\n", machine().describe_context(), data, mem_mask);
 	}
 	else
 	{
-		LOGMASKED(LOG_UNKNOWN, "%s: unimplemented external output data %04x mask %04x\n", machine().describe_context(), data, mem_mask);
+		LOGMASKED(LOG_UNKNOWN, "%s: unimplemented diverter output data %04x mask %04x\n", machine().describe_context(), data, mem_mask);
 	}
 }
 
@@ -350,10 +356,10 @@ u16 bfm_cobra3_state::io_r(offs_t offset, u16 mem_mask)
 				return m_ramdac->pal_r();
 			break;
 
-		case 0x800: // external cabinet inputs
+		case 0x800: // Phrase That Pays hopper opto inputs
 			if (m_hopper)
 				return m_hopper->line_r() ? 0 : 0x0002;
-			LOGMASKED(LOG_UNKNOWN, "%s: unknown external input read offset %08x mask %04x\n", machine().describe_context(), offset * 2, mem_mask);
+			LOGMASKED(LOG_UNKNOWN, "%s: unknown 0x800 input read offset %08x mask %04x\n", machine().describe_context(), offset * 2, mem_mask);
 			break;
 
 		default:
@@ -426,11 +432,11 @@ void bfm_cobra3_state::io_w(offs_t offset, u16 data, u16 mem_mask)
 			}
 			break;
 
-		case 0x900: // external cabinet outputs
-			external_outputs_w(data, mem_mask);
+		case 0x900: // coin diverter outputs
+			diverter_outputs_w(data, mem_mask);
 			break;
 
-		case 0xa00: // external cabinet outputs
+		case 0xa00: // hopper drive outputs
 		{
 			u16 handled = 0;
 			if (m_hopper && ACCESSING_BITS_0_7)
@@ -439,7 +445,7 @@ void bfm_cobra3_state::io_w(offs_t offset, u16 data, u16 mem_mask)
 				handled = 0x0020;
 			}
 			if (mem_mask & ~handled)
-				LOGMASKED(LOG_UNKNOWN, "%s: unimplemented external output write offset %08x data %04x mask %04x\n", machine().describe_context(), offset * 2, data, mem_mask);
+				LOGMASKED(LOG_UNKNOWN, "%s: unimplemented hopper drive output write offset %08x data %04x mask %04x\n", machine().describe_context(), offset * 2, data, mem_mask);
 			break;
 		}
 
@@ -592,11 +598,12 @@ void bfm_cobra3_state::machine_start()
 	save_item(NAME(m_lamp_port_a));
 	save_item(NAME(m_meter_latch));
 	save_item(NAME(m_triac_latch));
-	save_item(NAME(m_external_output_latch));
+	save_item(NAME(m_diverter_latch));
 	save_item(NAME(m_pound_tube_level));
 	save_item(NAME(m_twenty_p_tube_level));
 	save_item(NAME(m_tube_levels_initialized));
 	machine().save().register_postload(save_prepost_delegate(FUNC(bfm_cobra3_state::update_lamps), this));
+	machine().save().register_postload(save_prepost_delegate(FUNC(bfm_cobra3_state::update_diverters), this));
 }
 
 void bfm_cobra3_state::machine_reset()
