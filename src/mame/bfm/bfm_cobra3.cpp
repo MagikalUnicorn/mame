@@ -69,6 +69,7 @@
 #include "machine/rescap.h"
 #include "machine/scc66470.h"
 #include "machine/ticket.h"
+#include "machine/timer.h"
 #include "machine/watchdog.h"
 #include "sound/flt_vol.h"
 #include "sound/tms320av110.h"
@@ -109,6 +110,8 @@ public:
 protected:
 	void machine_start() override ATTR_COLD;
 	void machine_reset() override ATTR_COLD;
+	void video_start() override ATTR_COLD;
+	void video_reset() override ATTR_COLD;
 
 private:
 	static constexpr unsigned NVRAM_BYTES = 16 * 1024;
@@ -130,6 +133,7 @@ private:
 	void mem_w(offs_t offset, u16 data, u16 mem_mask = ~0);
 
 	u32 screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
+	TIMER_DEVICE_CALLBACK_MEMBER(scc_scanline);
 
 	void bfm_cobra3_map(address_map &map) ATTR_COLD;
 	void ramdac_map(address_map &map) ATTR_COLD;
@@ -154,7 +158,7 @@ private:
 	required_device<scc66470_device> m_scc66470;
 	required_device<sti3400_device> m_sti3400;
 	std::unique_ptr<u8[]> m_scc_line_buffer;
-	std::unique_ptr<u32[]> m_sti_line_buffer;
+	bitmap_rgb32 m_scc_bitmap;
 
 	// Cabinet I/O
 	required_ioport_array<5> m_strobein;
@@ -503,6 +507,34 @@ void bfm_cobra3_state::mem_w(offs_t offset, u16 data, u16 mem_mask)
 	}
 }
 
+TIMER_DEVICE_CALLBACK_MEMBER(bfm_cobra3_state::scc_scanline)
+{
+	rectangle const &visible = m_screen->visible_area();
+	if ((param < visible.top()) || (param > visible.bottom()))
+		return;
+
+	u32 *const destination = &m_scc_bitmap.pix(param, visible.left());
+
+	if (m_scc66470->display_enabled())
+	{
+		m_scc66470->line(param, m_scc_line_buffer.get(), visible.width());
+		pen_t const *const pens = m_palette->pens();
+		for (int x = 0; x != visible.width(); x++)
+		{
+			u8 const pen = m_scc_line_buffer[x];
+			// The Cobra mixer selects external MPEG video for palette index 0xfe.
+			if (pen == 0xfe)
+				destination[x] = rgb_t::transparent();
+			else
+				destination[x] = pens[pen];
+		}
+	}
+	else
+	{
+		std::fill_n(destination, visible.width(), rgb_t::transparent());
+	}
+}
+
 u32 bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
 	bitmap.fill(0, cliprect);
@@ -511,49 +543,18 @@ u32 bfm_cobra3_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap,
 
 	if (m_sti3400->video_valid())
 	{
-		int const source_width = m_sti3400->video_width();
-		int const source_height = m_sti3400->video_height();
-		if (source_width && source_height)
-		{
-			rectangle video(visible);
-			video.set_size(std::min(source_width * 2, visible.width()), std::min(source_height, visible.height()));
-			video.set_origin(visible.left() + (visible.width() - video.width()) / 2, visible.top() + (visible.height() - video.height()) / 2);
+		bitmap_rgb32 const &source = m_sti3400->bitmap();
+		rectangle video(visible);
+		video.set_size(std::min(source.width() * 2, visible.width()), std::min(source.height(), visible.height()));
+		video.set_origin(visible.left() + (visible.width() - video.width()) / 2, visible.top() + (visible.height() - video.height()) / 2);
 
-			rectangle const draw = video & cliprect;
-			int const source_left = ((source_width * 2 - video.width()) / 2 + draw.left() - video.left()) / 2;
-			int const source_right = ((source_width * 2 - video.width()) / 2 + draw.right() - video.left()) / 2;
-			for (int y = draw.top(); y <= draw.bottom(); y++)
-			{
-				u32 *const line = &bitmap.pix(y);
-				int const source_y = (source_height - video.height()) / 2 + y - video.top();
-				m_sti3400->video_line(source_y, source_left, source_right - source_left + 1, m_sti_line_buffer.get());
-				for (int x = draw.left(); x <= draw.right(); x++)
-				{
-					// SCC66470 8-bit output repeats each stored pixel twice horizontally.
-					int const source_x = ((source_width * 2 - video.width()) / 2 + x - video.left()) / 2;
-					line[x] = m_sti_line_buffer[source_x - source_left];
-				}
-			}
-		}
+		// SCC66470 8-bit output repeats each stored pixel twice horizontally.
+		s32 const startx = (((source.width() * 2 - video.width()) / 2) - video.left()) * 0x8000;
+		s32 const starty = (((source.height() - video.height()) / 2) - video.top()) * 0x10000;
+		copyrozbitmap(bitmap, video & cliprect, source, startx, starty, 0x8000, 0, 0, 0x10000, false);
 	}
 
-	if (m_scc66470->display_enabled())
-	{
-		rectangle const draw = visible & cliprect;
-		for (int y = draw.top(); y <= draw.bottom(); y++)
-		{
-			u32 *const line = &bitmap.pix(y);
-			m_scc66470->line(y, m_scc_line_buffer.get(), visible.width());
-
-			for (int x = draw.left(); x <= draw.right(); x++)
-			{
-				u8 const pen = m_scc_line_buffer[x - visible.left()];
-				// The Cobra mixer selects external MPEG video for palette index 0xfe.
-				if (pen != 0xfe)
-					line[x] = m_palette->pen(pen);
-			}
-		}
-	}
+	copybitmap_transalpha(bitmap, m_scc_bitmap, 0, 0, 0, 0, visible & cliprect);
 
 	return 0;
 }
@@ -583,9 +584,6 @@ void bfm_cobra3_state::machine_start()
 	assert(std::has_single_bit(m_cpuregion.length()));
 	assert(std::has_single_bit(m_mainram.length()));
 
-	m_scc_line_buffer = std::make_unique<u8[]>(m_screen->visible_area().width());
-	m_sti_line_buffer = std::make_unique<u32[]>(m_screen->visible_area().width());
-
 	save_item(NAME(m_active_strobe));
 	save_item(NAME(m_volume));
 	save_item(NAME(m_lamp_latch));
@@ -607,6 +605,21 @@ void bfm_cobra3_state::machine_reset()
 		m_twenty_p_tube_level = (m_initial_tube_fill[1]->read() * 150 + 50) / 100; // £30 capacity in 20p coins
 		m_tube_levels_initialized = true;
 	}
+}
+
+void bfm_cobra3_state::video_start()
+{
+	m_scc_bitmap.allocate(m_screen->width(), m_screen->height());
+	m_scc_line_buffer = std::make_unique<u8[]>(m_screen->visible_area().width());
+	m_scc_bitmap.fill(rgb_t::transparent());
+
+	// Earlier scanlines cannot be reconstructed from the restored SCC state.
+	save_item(NAME(m_scc_bitmap));
+}
+
+void bfm_cobra3_state::video_reset()
+{
+	m_scc_bitmap.fill(rgb_t::transparent());
 }
 
 void bfm_cobra3_state::bfm_cobra3(machine_config &config)
@@ -631,7 +644,6 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	// The SCC66470 produces a pixel clock at half its oscillator frequency.
 	// Cobra uses its 768-pixel, 280-visible-line mode in a 312-line field.
 	screen.set_raw(30_MHz_XTAL / 2, 960, 0, 768, 312, 32, 312);
-	screen.set_video_attributes(VIDEO_UPDATE_SCANLINE);
 	screen.set_screen_update(FUNC(bfm_cobra3_state::screen_update));
 	screen.screen_vblank().set(m_sti3400, FUNC(sti3400_device::vblank_w));
 
@@ -663,6 +675,7 @@ void bfm_cobra3_state::bfm_cobra3(machine_config &config)
 	m_scc66470->set_addrmap(0, &bfm_cobra3_state::scc66470_map);
 	m_scc66470->set_screen("screen");
 	m_scc66470->irq().set_inputline(m_maincpu, 5);
+	TIMER(config, "scc_scanline").configure_scanline(FUNC(bfm_cobra3_state::scc_scanline), m_screen, 0, 1);
 
 	STI3400(config, m_sti3400, 0); // decoder clock and external-memory cycle timing are not modelled
 	m_sti3400->set_dram_size(1024 * 1024); // Cobra's buffer pointers cover a 1 MiB address space
