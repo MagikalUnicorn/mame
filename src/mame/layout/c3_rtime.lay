@@ -128,6 +128,7 @@ arrangement has not been confirmed.
 	</group>
 
 	<view name="Screen and Controls">
+		<bounds x="-144" y="-192" width="1056" height="960" />
 		<element ref="panel"><bounds x="-144" y="-192" width="1056" height="960" /></element>
 		<element ref="name_panel_frame"><bounds x="72" y="-168" width="552" height="108" /></element>
 		<element id="name_panel_left" name="lamp14" ref="name_panel"><bounds x="84" y="-156" width="263.5" height="84" /></element>
@@ -164,7 +165,7 @@ arrangement has not been confirmed.
 		<group ref="button"><bounds x="716" y="653" width="76" height="56" /></group>
 	</view>
 
-	<view name="Screen Only"><screen index="0"><bounds x="0" y="0" width="768" height="576" /></screen></view>
+	<view name="Screen Only"><bounds x="0" y="0" width="768" height="576" /><screen index="0"><bounds x="0" y="0" width="768" height="576" /></screen></view>
 
 	<script><![CDATA[
 		local lamp_items = {

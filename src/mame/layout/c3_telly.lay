@@ -456,6 +456,7 @@ highlighting here indicates the coin-channel acceptance state for convenience.
 		</text>
 	</element>
 	<view name="Screen and Lamps">
+		<bounds x="-144" y="-192" width="1056" height="960" />
 		<element ref="panel">
 			<bounds x="-144" y="-192" width="1056" height="960" />
 		</element>
@@ -689,6 +690,7 @@ highlighting here indicates the coin-channel acceptance state for convenience.
 	</view>
 
 	<view name="Screen Only">
+		<bounds x="0" y="0" width="768" height="576" />
 		<screen index="0">
 			<bounds x="0" y="0" width="768" height="576" />
 		</screen>

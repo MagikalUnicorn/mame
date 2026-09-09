@@ -10,30 +10,7 @@
 DEFINE_DEVICE_TYPE(MC68340_DMA_MODULE, mc68340_dma_module_device, "mc68340dma", "MC68340 DMA Module")
 
 
-namespace {
-
-constexpr uint8_t CSR_IRQ  = 0x80;
-constexpr uint8_t CSR_DONE = 0x40;
-constexpr uint8_t CSR_BES  = 0x20;
-constexpr uint8_t CSR_BED  = 0x10;
-constexpr uint8_t CSR_CONF = 0x08;
-constexpr uint8_t CSR_BRKP = 0x04;
-constexpr uint8_t CSR_CLEARABLE = CSR_DONE | CSR_BES | CSR_BED | CSR_CONF | CSR_BRKP;
-
-constexpr uint16_t MCR_STP = 0x8000;
-constexpr uint16_t MCR_SHARED = 0xe00f;
-
-constexpr uint16_t CCR_INTB = 0x8000;
-constexpr uint16_t CCR_INTN = 0x4000;
-constexpr uint16_t CCR_INTE = 0x2000;
-constexpr uint16_t CCR_ECO  = 0x1000;
-constexpr uint16_t CCR_SAPI = 0x0800;
-constexpr uint16_t CCR_DAPI = 0x0400;
-constexpr uint16_t CCR_REQ  = 0x0030;
-constexpr uint16_t CCR_SD   = 0x0002;
-constexpr uint16_t CCR_STR  = 0x0001;
-
-unsigned transfer_size(unsigned field)
+unsigned mc68340_dma_module_device::transfer_size(unsigned field)
 {
 	switch (field & 3)
 	{
@@ -43,9 +20,6 @@ unsigned transfer_size(unsigned field)
 	default: return 0;
 	}
 }
-
-} // anonymous namespace
-
 
 uint16_t mc68340_dma_module_device::read(offs_t offset, uint16_t)
 {
@@ -76,33 +50,29 @@ void mc68340_dma_module_device::write(offs_t offset, uint16_t data, uint16_t mem
 	channel_state &channel = m_channel[channel_number];
 	unsigned const reg = byte_offset & 0x1e;
 
-	auto combine16 = [data, mem_mask] (uint16_t &value)
+	auto combine32 = [reg, write_data = data, write_mask = mem_mask] (uint32_t &value)
 	{
-		value = (value & ~mem_mask) | (data & mem_mask);
-	};
-	auto combine32 = [reg, data, mem_mask] (uint32_t &value)
-	{
-		if (BIT(reg, 1))
-			value = (value & ~(uint32_t(mem_mask))) | (data & mem_mask);
-		else
-			value = (value & ~(uint32_t(mem_mask) << 16)) | (uint32_t(data & mem_mask) << 16);
+		unsigned const shift = BIT(reg, 1) ? 0 : 16;
+		u32 const data = u32(write_data) << shift;
+		u32 const mem_mask = u32(write_mask) << shift;
+		COMBINE_DATA(&value);
 	};
 
 	switch (reg)
 	{
 	case 0x00:
-		combine16(channel.mcr);
+		COMBINE_DATA(&channel.mcr);
 		m_channel[channel_number ^ 1].mcr = (m_channel[channel_number ^ 1].mcr & ~MCR_SHARED) | (channel.mcr & MCR_SHARED);
 		m_cpu->update_ipl();
 		break;
 
 	case 0x04:
-		combine16(channel.intr);
+		COMBINE_DATA(&channel.intr);
 		m_cpu->update_ipl();
 		break;
 
 	case 0x08:
-		combine16(channel.ccr);
+		COMBINE_DATA(&channel.ccr);
 		if (channel.csr & CSR_IRQ)
 			channel.ccr &= ~CCR_STR;
 		m_cpu->update_ipl();
@@ -158,7 +128,7 @@ void mc68340_dma_module_device::done_w(unsigned channel_number, int state)
 }
 
 
-bool mc68340_dma_module_device::irq_pending(channel_state const &channel) const
+bool mc68340_dma_module_device::irq_pending(channel_state const &channel)
 {
 	return ((channel.csr & CSR_DONE) && (channel.ccr & CCR_INTN)) ||
 		((channel.csr & (CSR_BES | CSR_BED | CSR_CONF)) && (channel.ccr & CCR_INTE)) ||
@@ -371,6 +341,7 @@ void mc68340_dma_module_device::device_reset()
 		channel.done_out = 1;
 	}
 	restore_outputs();
+	m_cpu->update_ipl();
 }
 
 
@@ -385,6 +356,7 @@ void mc68340_dma_module_device::module_reset()
 		set_dack(channel_number, 1);
 		set_done_output(channel_number, 1);
 	}
+	m_cpu->update_ipl();
 }
 
 

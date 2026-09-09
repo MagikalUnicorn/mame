@@ -118,6 +118,7 @@ lamp outputs to equal name-panel sections are also reconstructions.
 	</group>
 
 	<view name="Screen and Controls">
+		<bounds x="-144" y="-192" width="1056" height="960" />
 		<element ref="panel"><bounds x="-144" y="-192" width="1056" height="960" /></element>
 		<element ref="name_panel_frame"><bounds x="72" y="-168" width="552" height="108" /></element>
 		<repeat count="3">
@@ -159,7 +160,7 @@ lamp outputs to equal name-panel sections are also reconstructions.
 		<group ref="button"><bounds x="562" y="653" width="100" height="56" /></group>
 	</view>
 
-	<view name="Screen Only"><screen index="0"><bounds x="0" y="0" width="768" height="576" /></screen></view>
+	<view name="Screen Only"><bounds x="0" y="0" width="768" height="576" /><screen index="0"><bounds x="0" y="0" width="768" height="576" /></screen></view>
 
 	<script><![CDATA[
 		local lamp_items = {

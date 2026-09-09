@@ -226,6 +226,7 @@ treatment are reconstructions.
 	<element name="label_direction"><text string="▲"><color red="0.00" green="0.00" blue="0.00" /></text></element>
 
 	<view name="Screen and Controls">
+		<bounds x="-144" y="-192" width="1056" height="960" />
 		<element ref="panel"><bounds x="-144" y="-192" width="1056" height="960" /></element>
 		<element ref="name_panel_frame"><bounds x="72" y="-168" width="552" height="108" /></element>
 		<repeat count="10">
@@ -305,6 +306,7 @@ treatment are reconstructions.
 	</view>
 
 	<view name="Screen Only">
+		<bounds x="0" y="0" width="768" height="576" />
 		<screen index="0"><bounds x="0" y="0" width="768" height="576" /></screen>
 	</view>
 
