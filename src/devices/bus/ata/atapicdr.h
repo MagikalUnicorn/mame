@@ -25,6 +25,7 @@ public:
 	atapi_cdrom_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
 	void set_ultra_dma_mode(uint16_t mode);
+	void set_data_read_rate(u32 bytes_per_second) { m_data_read_rate = bytes_per_second; }
 
 	uint16_t *identify_device_buffer() { return m_identify_buffer; }
 
@@ -54,11 +55,14 @@ protected:
 	virtual void identify_packet_device() override;
 	virtual void process_buffer() override;
 	virtual void ExecCommand() override;
+	virtual attotime data_in_delay(unsigned bytes) const override;
 	u32 m_sequence_counter;
 	bool m_media_change;
 	uint16_t m_ultra_dma_mode;
 
 private:
+	u32 m_data_read_rate = 0;
+
 	// device_ata_hle_interface implementation
 	virtual void set_irq_out(int state) override { device_ata_interface::set_irq(state); }
 	virtual void set_dmarq_out(int state) override { device_ata_interface::set_dmarq(state); }

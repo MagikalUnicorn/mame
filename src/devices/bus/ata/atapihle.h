@@ -63,6 +63,7 @@ protected:
 	virtual void signature() override;
 	virtual void process_command() override;
 	virtual void finished_command() override;
+	virtual attotime data_in_delay(unsigned bytes) const { return attotime::zero; }
 	virtual bool is_packet_device() override { return true; }
 	virtual bool always_respond() override { return false; }
 
@@ -73,9 +74,10 @@ protected:
 
 private:
 	void wait_buffer();
+	void read_buffer();
 
-	int m_packet;
-	int m_data_size;
+	u8 m_packet;
+	s32 m_data_size;
 	bool m_is_ready;
 
 	static constexpr int ATAPI_BUFFER_LENGTH = 0xf800;

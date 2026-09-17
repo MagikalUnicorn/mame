@@ -1,5 +1,5 @@
 // license:LGPL-2.1+
-// copyright-holders:Angelo Salese
+// copyright-holders:Angelo Salese, MagikalUnicorn
 /***********************************************************************************************************
 
     'High Rate DVD' HW (c) 1998 Nichibutsu
@@ -7,7 +7,7 @@
     preliminary driver by Angelo Salese
 
     TODO:
-    - Implement DVD routing and YUV decoding;
+    - Verify MPEG/VDP mixer controls and video alignment/cropping;
     - game timings seem busted, could be due of missing DVD hook-up
     - csplayh1: inputs doesn't work at all, slower than the others too.
       Probably not a DVD but CD rom game?
@@ -52,6 +52,8 @@
 #include "speaker.h"
 
 
+namespace {
+
 class hrdvd_ata_controller_device : public abstract_ata_interface_device
 {
 public:
@@ -64,7 +66,11 @@ public:
 	void write(offs_t offset, uint16_t data, uint16_t mem_mask);
 };
 
+} // anonymous namespace
+
 DEFINE_DEVICE_TYPE(HRDVD_ATA_CONTROLLER_DEVICE, hrdvd_ata_controller_device, "hrdvd_atactrl", "High Rate DVD ATA controller device")
+
+namespace {
 
 class hrdvd_state : public driver_device
 {
@@ -85,6 +91,13 @@ public:
 		m_region_maincpu(*this, "maincpu")
 	{ }
 
+	void hrdvd(machine_config &config);
+
+protected:
+	virtual void machine_start() override ATTR_COLD;
+	virtual void machine_reset() override ATTR_COLD;
+
+private:
 	required_device<tmp68301_device> m_maincpu;
 	required_device<h83002_device> m_subcpu;
 	required_device<hrdvd_ata_controller_device> m_ata;
@@ -122,16 +135,39 @@ public:
 	void ata_irq(int state);
 	void ata_drq(int state);
 
-	virtual void machine_start() override ATTR_COLD;
-	virtual void machine_reset() override ATTR_COLD;
+	u32 screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 
 	void general_init(int patchaddress, int patchvalue);
-	void hrdvd(machine_config &config);
 	void hrdvd_map(address_map &map) ATTR_COLD;
 	void hrdvd_sub_map(address_map &map) ATTR_COLD;
 
+	static void atapi_devs(device_slot_interface &device);
 	static void dvdrom_config(device_t *device);
 };
+
+u32 hrdvd_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+{
+	if (!m_mpeg->video_valid())
+		return m_video->screen_update(screen, bitmap, cliprect);
+
+	const bitmap_rgb32 &video = m_mpeg->video_bitmap();
+	const rectangle &visible = screen.visible_area();
+	rectangle area = cliprect;
+	area &= visible;
+	bitmap.fill(rgb_t::black(), cliprect);
+	for (int y = area.top(); y <= area.bottom(); y++)
+	{
+		const u32 *const source = &video.pix((y - visible.top()) * video.height() / visible.height());
+		u32 *const destination = &bitmap.pix(y);
+		for (int x = area.left(); x <= area.right(); x++)
+			destination[x] = source[(x - visible.left()) * video.width() / visible.width()];
+	}
+
+	// V9958 palette index zero carries transparency in its output bitmap.
+	// TODO: verify the external mixer's enable controls and video alignment.
+	copybitmap_transalpha(bitmap, m_video->get_bitmap(), 0, 0, 0, 0, cliprect);
+	return 0;
+}
 
 void hrdvd_state::mpeg_dreq_w(int state)
 {
@@ -464,7 +500,7 @@ void hrdvd_state::tmp68301_parallel_port_w(uint16_t data)
 	logerror("tmp: %02x\n", data);
 }
 
-static void atapi_devs(device_slot_interface &device)
+void hrdvd_state::atapi_devs(device_slot_interface &device)
 {
 	device.option_add("dvdrom", ATAPI_DVDROM);
 }
@@ -473,6 +509,7 @@ void hrdvd_state::dvdrom_config(device_t *device)
 {
 	auto *drive = downcast<atapi_dvdrom_device *>(device);
 	drive->set_model("PIONEER        DVD-A01  1.17"); // Wants firmware version between 1.14 and 1.19
+	drive->set_data_read_rate(1'385'000); // DVD-A01: 1x DVD; drive caching and seek timing remain unmodelled.
 }
 
 void hrdvd_state::hrdvd(machine_config &config)
@@ -509,8 +546,11 @@ void hrdvd_state::hrdvd(machine_config &config)
 	m_video->int_cb().set_inputline(m_maincpu, 0);
 
 	SCREEN(config, m_screen);
+	m_screen->set_screen_update(FUNC(hrdvd_state::screen_update));
+	m_screen->screen_vblank().set(m_mpeg, FUNC(zr36110_device::vblank_w));
 
 	ZR36110(config, m_mpeg, 27_MHz_XTAL/2);
+	m_mpeg->set_mb4(false); // TODO: confirm the board's MB4 clock-multiplier strap.
 	m_mpeg->drq_w().set(FUNC(hrdvd_state::mpeg_dreq_w));
 
 	NN71003F(config, m_mpega);
@@ -999,6 +1039,8 @@ ROM_START( konhaji )
 	ROM_LOAD( "gal16v8b.bin", 0x000000, 0x000117, CRC(9f0dec43) SHA1(d836e564da496c3049e16f025daf362cced413d4) )
 ROM_END
 
+
+} // anonymous namespace
 
 /***************************************************************************
 

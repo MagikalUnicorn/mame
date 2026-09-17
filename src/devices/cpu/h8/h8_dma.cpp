@@ -147,6 +147,8 @@ void h8gen_dma_channel_device::set_dreq(int state)
 		return;
 
 	m_dreq = state;
+	if(m_state[1].m_flags & h8_dma_state::MASTER_DISABLED)
+		return;
 
 	// Only subchannel B/1 can react to dreq.
 	if(m_dreq) {
@@ -548,17 +550,34 @@ u8 h8h_dma_channel_device::dtcrb_r()
 
 void h8h_dma_channel_device::dtcrb_w(u8 data)
 {
+	const bool master_changed = BIT(m_dtcr[1] ^ data, 7);
 	m_dtcr[1] = data;
 	logerror("dtcrb_w %02x\n", m_dtcr[1]);
+	if(master_changed && (m_state[1].m_flags & (h8_dma_state::ACTIVE | h8_dma_state::FAE)) == (h8_dma_state::ACTIVE | h8_dma_state::FAE)) {
+		// DTME halts the transfer without completing it or clearing DTE.
+		// Block transfers wait for a fresh request when DTME is restored.
+		if(!BIT(data, 7))
+			m_state[1].m_flags |= h8_dma_state::MASTER_DISABLED | h8_dma_state::SUSPENDED;
+		else {
+			m_state[1].m_flags &= ~h8_dma_state::MASTER_DISABLED;
+			const s8 vector = m_state[1].m_trigger_vector;
+			if(vector == AUTOREQ_CS || vector == AUTOREQ_B || (vector == DREQ_LEVEL && m_dreq))
+				m_state[1].m_flags &= ~h8_dma_state::SUSPENDED;
+		}
+	}
 	m_dma->start_stop_test();
+	m_cpu->update_active_dma_channel();
 }
 
 void h8h_dma_channel_device::dma_done(int submodule)
 {
-	if(m_state[submodule].m_flags & h8_dma_state::FAE)
-		m_dtcr[0] &= ~0x80;
-	else
-		m_dtcr[submodule] &= ~0x80;
+	const unsigned control = (m_state[submodule].m_flags & h8_dma_state::FAE) ? 0 : submodule;
+	// Software can change DTIE while a transfer is active, including clearing
+	// it together with DTE to abort without requesting a completion interrupt.
+	m_state[submodule].m_flags &= ~h8_dma_state::TEND_INTERRUPT;
+	if(BIT(m_dtcr[control], 3))
+		m_state[submodule].m_flags |= h8_dma_state::TEND_INTERRUPT;
+	m_dtcr[control] &= ~0x80;
 	h8gen_dma_channel_device::dma_done(submodule);
 }
 
@@ -578,6 +597,8 @@ u16 h8h_dma_channel_device::channel_flags(int submodule) const
 	if((m_dtcr[0] & 6) == 6) {
 		// FAE mode, expect submodule==1
 		res |= h8_dma_state::FAE;
+		if(!BIT(m_dtcr[1], 7))
+			res |= h8_dma_state::MASTER_DISABLED | h8_dma_state::SUSPENDED;
 
 		if(BIT(m_dtcr[0], 6))
 			res |= h8_dma_state::MODE_16;
@@ -626,7 +647,9 @@ u8 h8h_dma_channel_device::active_channels() const
 {
 	u8 res = 0;
 	if((m_dtcr[0] & 6) == 6) {
-		if(BIT(m_dtcr[0], 7) && BIT(m_dtcr[1], 7))
+		// Both enables are needed to start, but a DTME halt retains the
+		// active transfer's addresses and counts until DTE is cleared.
+		if(BIT(m_dtcr[0], 7) && (BIT(m_dtcr[1], 7) || (m_state[1].m_flags & h8_dma_state::ACTIVE)))
 			res |= 2;
 	} else {
 		if(BIT(m_dtcr[0], 7))

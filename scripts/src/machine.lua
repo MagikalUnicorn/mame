@@ -2749,6 +2749,18 @@ end
 
 ---------------------------------------------------
 --
+--@src/devices/machine/mpeg_system.h,MACHINES["MPEG_SYSTEM"] = true
+---------------------------------------------------
+
+if MACHINES["MPEG_SYSTEM"] then
+	files {
+		MAME_DIR .. "src/devices/machine/mpeg_system.cpp",
+		MAME_DIR .. "src/devices/machine/mpeg_system.h",
+	}
+end
+
+---------------------------------------------------
+--
 --@src/devices/machine/msm5001n.h,MACHINES["MSM5001N"] = true
 ---------------------------------------------------
 

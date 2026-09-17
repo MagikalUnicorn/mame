@@ -9,6 +9,10 @@
 #include "emu.h"
 #include "nn71003f.h"
 
+#define LOG_SERIAL (1U << 1)
+#define VERBOSE (0)
+#include "logmacro.h"
+
 DEFINE_DEVICE_TYPE(NN71003F, nn71003f_device, "nn71003f", "NN71003F mpeg audio chip")
 
 nn71003f_device::nn71003f_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
@@ -23,6 +27,8 @@ void nn71003f_device::device_start()
 	save_item(NAME(m_ss));
 	save_item(NAME(m_sclk));
 	save_item(NAME(m_mosi));
+	save_item(NAME(m_spi_cnt));
+	save_item(NAME(m_spi_byte));
 
 	stream_alloc(0, 2, 48000);
 }
@@ -32,6 +38,8 @@ void nn71003f_device::device_reset()
 	m_ss = 0;
 	m_sclk = 0;
 	m_mosi = 0;
+	m_spi_cnt = 0;
+	m_spi_byte = 0;
 }
 
 void nn71003f_device::ss_w(int state)
@@ -55,7 +63,7 @@ void nn71003f_device::sclk_w(int state)
 	if(m_spi_cnt & 7)
 		return;
 
-	logerror("SPI %x: %02x\n", m_spi_cnt >> 3, m_spi_byte);
+	LOG("SPI %x: %02x\n", m_spi_cnt >> 3, m_spi_byte);
 }
 
 void nn71003f_device::mosi_w(int state)
@@ -67,20 +75,19 @@ void nn71003f_device::mosi_w(int state)
 
 void nn71003f_device::frm_w(int state)
 {
-	logerror("frm_w %d\n", state);
+	LOGMASKED(LOG_SERIAL, "frm_w %d\n", state);
 }
 
 void nn71003f_device::dat_w(int state)
 {
-	logerror("dat_w %d\n", state);
+	LOGMASKED(LOG_SERIAL, "dat_w %d\n", state);
 }
 
 void nn71003f_device::clk_w(int state)
 {
-	logerror("clk_w %d\n", state);
+	LOGMASKED(LOG_SERIAL, "clk_w %d\n", state);
 }
 
 void nn71003f_device::sound_stream_update(sound_stream &stream)
 {
 }
-

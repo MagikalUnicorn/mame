@@ -54,6 +54,9 @@ void h8_watchdog_device::tcnt_update(u64 cur_time)
 		int shift = (m_type == S ? div_s : div_bh)[m_tcsr & TCSR_CKS];
 		if(!cur_time)
 			cur_time = m_cpu->total_cycles();
+		// A register access may already have advanced the counter past a queued event.
+		if(cur_time < m_tcnt_cycle_base)
+			return;
 		u64 spos = m_tcnt_cycle_base >> shift;
 		u64 epos = cur_time >> shift;
 

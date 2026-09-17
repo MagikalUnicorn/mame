@@ -285,8 +285,10 @@ bool h8_device::trigger_dma(int vector)
 	bool drop_interrupt = false;
 	for(int i=0; i != 8; i++)
 		if(m_dma_channel[i] && ((m_dma_channel[i]->m_flags & (h8_dma_state::ACTIVE|h8_dma_state::SUSPENDED)) == (h8_dma_state::ACTIVE|h8_dma_state::SUSPENDED)) && m_dma_channel[i]->m_trigger_vector == vector) {
-			m_dma_channel[i]->m_flags &= ~h8_dma_state::SUSPENDED;
-			dma_triggered = true;
+			if(!(m_dma_channel[i]->m_flags & h8_dma_state::MASTER_DISABLED)) {
+				m_dma_channel[i]->m_flags &= ~h8_dma_state::SUSPENDED;
+				dma_triggered = true;
+			}
 			if(m_dma_channel[i]->m_flags & h8_dma_state::EAT_INTERRUPT)
 				drop_interrupt = true;
 		}
@@ -309,7 +311,7 @@ void h8_device::set_dma_channel(h8_dma_state *state)
 void h8_device::update_active_dma_channel()
 {
 	for(int i=0; i != 8; i++) {
-		if(m_dma_channel[i] && ((m_dma_channel[i]->m_flags & (h8_dma_state::ACTIVE|h8_dma_state::SUSPENDED)) == h8_dma_state::ACTIVE)) {
+		if(m_dma_channel[i] && ((m_dma_channel[i]->m_flags & (h8_dma_state::ACTIVE|h8_dma_state::SUSPENDED|h8_dma_state::MASTER_DISABLED)) == h8_dma_state::ACTIVE)) {
 			m_current_dma = i;
 			return;
 		}

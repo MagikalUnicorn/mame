@@ -15,11 +15,15 @@ atapi_hle_device::atapi_hle_device(const machine_config &mconfig, device_type ty
 void atapi_hle_device::device_start()
 {
 	t10_start(*this);
+	save_item(NAME(m_packet));
+	save_item(NAME(m_data_size));
 }
 
 void atapi_hle_device::device_reset()
 {
 	t10_reset();
+	m_packet = 0;
+	m_data_size = 0;
 }
 
 void atapi_hle_device::set_is_ready(bool state)
@@ -74,7 +78,6 @@ void atapi_hle_device::process_buffer()
 			break;
 
 		case SCSI_PHASE_DATAIN:
-			/// TODO: delay data
 			fill_buffer();
 			break;
 
@@ -126,20 +129,11 @@ void atapi_hle_device::fill_buffer()
 
 		if (m_buffer_size > 0)
 		{
-			ReadData( &m_buffer[0], m_buffer_size );
-			m_data_size -= m_buffer_size;
-
-			m_status |= IDE_STATUS_DRQ;
-			m_sector_count = ATAPI_INTERRUPT_REASON_IO;
-
-			if (m_feature & ATAPI_FEATURES_FLAG_DMA)
-			{
-				set_dmarq(ASSERT_LINE);
-			}
+			const attotime delay = data_in_delay(m_buffer_size);
+			if (delay != attotime::zero)
+				start_busy(delay, PARAM_COMMAND);
 			else
-			{
-				set_irq(ASSERT_LINE);
-			}
+				read_buffer();
 		}
 		else
 		{
@@ -158,6 +152,18 @@ void atapi_hle_device::fill_buffer()
 		m_sector_count = ATAPI_INTERRUPT_REASON_IO | ATAPI_INTERRUPT_REASON_CD;
 		break;
 	}
+}
+
+void atapi_hle_device::read_buffer()
+{
+	ReadData(&m_buffer[0], m_buffer_size);
+	m_data_size -= m_buffer_size;
+	m_status |= IDE_STATUS_DRQ;
+	m_sector_count = ATAPI_INTERRUPT_REASON_IO;
+	if (m_feature & ATAPI_FEATURES_FLAG_DMA)
+		set_dmarq(ASSERT_LINE);
+	else
+		set_irq(ASSERT_LINE);
 }
 
 void atapi_hle_device::wait_buffer()
@@ -280,6 +286,9 @@ void atapi_hle_device::finished_command()
 {
 	switch (m_command)
 	{
+	case IDE_COMMAND_PACKET:
+		read_buffer();
+		break;
 	default:
 		device_ata_hle_interface::finished_command();
 		break;

@@ -92,6 +92,15 @@ void atapi_cdrom_device::set_ultra_dma_mode(uint16_t mode)
 	m_ultra_dma_mode = mode;
 }
 
+attotime atapi_cdrom_device::data_in_delay(unsigned bytes) const
+{
+	// Optional media transfer timing.  Command responses are not disc reads.
+	// Read-ahead caching, seek time and rotational latency are not modelled.
+	if (m_data_read_rate && (command[0] == T10SBC_CMD_READ_10 || command[0] == T10SBC_CMD_READ_12))
+		return attotime::from_ticks(bytes, m_data_read_rate);
+	return attotime::zero;
+}
+
 void atapi_cdrom_device::device_reset()
 {
 	atapi_hle_device::device_reset();

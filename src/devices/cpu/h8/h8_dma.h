@@ -32,6 +32,7 @@ struct h8_dma_state {
 		DEST_IDLE              = 0x0800, // Don't increment/decrement destination (folded into incs/incd)
 		MAR_IS_DEST            = 0x1000, // MAR is destination in SAE (folded), destibation is the block in fae block
 		FAE                    = 0x2000, // FAE mode (for interrupt generation)
+		MASTER_DISABLED        = 0x8000, // Full-address transfer halted by DTME
 	};
 
 	u32 m_source, m_dest;
