@@ -76,8 +76,6 @@ public:
 	DECLARE_INPUT_CHANGED_MEMBER(power_off);
 	DECLARE_INPUT_CHANGED_MEMBER(reset_button);
 
-	virtual void vblank_extra() { }
-
 protected:
 	using video_standard = xavix_video_device::video_standard;
 

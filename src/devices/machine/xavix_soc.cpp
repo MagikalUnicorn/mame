@@ -67,7 +67,6 @@ xavix_soc_device::xavix_soc_device(const machine_config &mconfig, device_type ty
 	, m_power_read_cb(*this, 0)
 	, m_power_off_cb(*this)
 	, m_external_bus_ctrl_cb(*this)
-	, m_vblank_cb(*this)
 	, m_external_code_read_cb(*this)
 	, m_external_data_read_cb(*this)
 	, m_external_map_device(nullptr)
@@ -304,7 +303,6 @@ void xavix_soc_device::device_start()
 	std::ranges::generate(m_mainram, [this] () { return u8(machine().rand()); });
 
 	m_power_off_cb.resolve_safe();
-	m_vblank_cb.resolve_safe();
 	m_watchdog_timer = timer_alloc(FUNC(xavix_soc_device::watchdog_expired), this);
 	auto const service = [this] (offs_t offset, u8 &data, u8 mem_mask)
 	{
@@ -421,10 +419,7 @@ u8 xavix_soc_device::lightgun2_r(offs_t offset)
 void xavix_soc_device::vblank_w(int state)
 {
 	if (state)
-	{
 		m_video->vblank();
-		m_vblank_cb();
-	}
 }
 
 u32 xavix_soc_device::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)

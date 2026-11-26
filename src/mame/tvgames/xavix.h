@@ -12,6 +12,7 @@
 #include "xavix_io_crok_controllers.h"
 #include "xavix_io_daig_robots.h"
 #include "xavix_io_evio_bow.h"
+#include "xavix_io_lightgun.h"
 #include "xavix_io_ltv_tam_ir.h"
 #include "xavix_io_stad_bat.h"
 #include "xavix_io_wamg_sensor.h"
@@ -392,34 +393,33 @@ private:
 	output_finder<> m_digit;
 };
 
-template <typename Base, u32 Players>
+template <typename Base, u32 Players, u32 Player1Event = 0, u32 Player2Event = 1>
 class xavix_lightgun_state : public Base
 {
+	static_assert(Players == 1 || Players == 2);
+
 public:
-	xavix_lightgun_state(const machine_config &mconfig, device_type type, const char *tag)
+	xavix_lightgun_state(const machine_config &mconfig, device_type type, const char *tag, xavix_lightgun_device::model model)
 		: Base(mconfig, type, tag)
-		, m_lightgun_x(*this, "GUN%u_0", 1U)
-		, m_lightgun_y(*this, "GUN%u_1", 1U)
+		, m_gun(*this, "gun%u", 1U)
+		, m_gun_model(model)
 	{ }
 
 protected:
-	void configure_lightgun_scanlines(machine_config &config, u8 event_mask) ATTR_COLD;
+	virtual void configure_board(machine_config &config) override ATTR_COLD;
 	u8 lightgun_position_r(u32 player, offs_t offset, u16 x_offset = 0, u16 y_scale = 0x100, u16 y_offset = 0, u16 x_scale = 0x100);
-	virtual u8 lightgun_event_mask() { return m_lightgun_event_mask; }
-	u8 m_lightgun_event_mask = 0;
+
+	required_device_array<xavix_lightgun_device, Players> m_gun;
 
 private:
-	TIMER_DEVICE_CALLBACK_MEMBER(lightgun_scanline_cb);
-
-	required_ioport_array<Players> m_lightgun_x;
-	required_ioport_array<Players> m_lightgun_y;
+	xavix_lightgun_device::model const m_gun_model;
 };
 
 class xavix_tak_daig_state : public xavix_lightgun_state<xavix_cart_state, 1>
 {
 public:
 	xavix_tak_daig_state(const machine_config &mconfig, device_type type, const char *tag)
-		: xavix_lightgun_state(mconfig, type, tag)
+		: xavix_lightgun_state(mconfig, type, tag, xavix_lightgun_device::model::DRAGON_CANNON)
 		, m_robots(*this, "robots")
 	{ }
 
@@ -474,17 +474,15 @@ private:
 	required_device<xavix_wamg_sensor_device> m_sensor;
 };
 
-class xavix_rad_hnt_state : public xavix_lightgun_state<xavix_power_state, 1>
+class xavix_rad_hnt_state : public xavix_lightgun_state<xavix_power_state, 1, 3>
 {
 public:
 	xavix_rad_hnt_state(const machine_config &mconfig, device_type type, const char *tag)
-		: xavix_lightgun_state(mconfig, type, tag)
+		: xavix_lightgun_state(mconfig, type, tag, xavix_lightgun_device::model::BUCKMASTERS)
 	{ }
 
 	void xavix_rad_hnt(machine_config &config) ATTR_COLD;
 	void xavix_rad_hnt2(machine_config &config) ATTR_COLD;
-
-	virtual void vblank_extra() override;
 
 protected:
 	virtual u8 lightgun_r(offs_t offset) override;
@@ -494,25 +492,24 @@ class xavix_gungunad_state : public xavix_lightgun_state<xavix_power_state, 2>
 {
 public:
 	xavix_gungunad_state(const machine_config &mconfig, device_type type, const char *tag)
-		: xavix_lightgun_state(mconfig, type, tag)
+		: xavix_lightgun_state(mconfig, type, tag, xavix_lightgun_device::model::ADVENTURE)
 	{ }
 
 	void xavix_gungunad(machine_config &config) ATTR_COLD;
 
 protected:
 	virtual u8 lightgun_r(offs_t offset) override;
-	virtual u8 lightgun_event_mask() override { return m_lightgun_event_mask & (BIT(m_in0->read(), 6) ? 0xff : 0xfd); }
 };
 
 class xavix_gungunrv_state : public xavix_lightgun_state<xavix_i2c_state, 2>
 {
 public:
 	xavix_gungunrv_state(const machine_config &mconfig, device_type type, const char *tag)
-		: xavix_lightgun_state(mconfig, type, tag)
-		, m_gun_recoil(*this, "Player1_Gun_Recoil")
+		: xavix_lightgun_state(mconfig, type, tag, xavix_lightgun_device::model::REVOLUTION)
 	{ }
 
 	void xavix_gungunrv(machine_config &config) ATTR_COLD;
+	int support_trigger_r() { return m_gun[1]->connected_r() && !m_gun[1]->trigger_r(); }
 
 protected:
 	virtual void machine_start() override ATTR_COLD;
@@ -521,20 +518,18 @@ protected:
 	virtual void io0_output_w(u8 data, u8 direction) override;
 	virtual void io1_output_w(u8 data, u8 direction) override;
 	virtual u8 lightgun_r(offs_t offset) override;
-	virtual u8 lightgun_event_mask() override { return m_lightgun_event_mask & (BIT(m_in1->read(), 1) ? 0xff : 0xfd); }
 
 private:
 	TIMER_CALLBACK_MEMBER(shutdown_confirmed);
 
-	output_finder<> m_gun_recoil;
 	emu_timer *m_shutdown_timer = nullptr;
 };
 
-class xavix_pl1000_state : public xavix_lightgun_state<xavix_state, 2>
+class xavix_pl1000_state : public xavix_lightgun_state<xavix_state, 2, 3, 3>
 {
 public:
 	xavix_pl1000_state(const machine_config &mconfig, device_type type, const char *tag)
-		: xavix_lightgun_state(mconfig, type, tag)
+		: xavix_lightgun_state(mconfig, type, tag, xavix_lightgun_device::model::VIDEO_CHALLENGER)
 	{ }
 
 	void init_pl1000();
@@ -555,10 +550,8 @@ class xavix_tomshoot_state : public xavix_lightgun_state<xavix_i2c_power_state, 
 {
 public:
 	xavix_tomshoot_state(const machine_config &mconfig, device_type type, const char *tag)
-		: xavix_lightgun_state(mconfig, type, tag)
+		: xavix_lightgun_state(mconfig, type, tag, xavix_lightgun_device::model::SHATEKING)
 	{ }
-
-	virtual void vblank_extra() override;
 
 protected:
 	virtual u8 lightgun_r(offs_t offset) override;
@@ -568,12 +561,10 @@ class xavix_epo_dmon_state : public xavix_lightgun_state<xavix_i2c_state, 2>
 {
 public:
 	xavix_epo_dmon_state(const machine_config &mconfig, device_type type, const char *tag)
-		: xavix_lightgun_state(mconfig, type, tag)
+		: xavix_lightgun_state(mconfig, type, tag, xavix_lightgun_device::model::AIR_CANNON)
 	{ }
 
 	void xavix_epo_dmon(machine_config &config) ATTR_COLD;
-
-	virtual void vblank_extra() override;
 
 protected:
 	virtual u8 lightgun_r(offs_t offset) override;

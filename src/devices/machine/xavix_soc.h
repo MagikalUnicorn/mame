@@ -63,7 +63,6 @@ public:
 	template <typename... T> void set_power_off_callback(T &&... args) { m_power_off_cb.set(std::forward<T>(args)...); }
 	auto external_bus_ctrl_callback() { return m_external_bus_ctrl_cb.bind(); }
 	template <typename... T> void set_video_read_callback(T &&... args) { m_video.lookup()->set_video_read_callback(std::forward<T>(args)...); }
-	template <typename... T> void set_vblank_callback(T &&... args) { m_vblank_cb.set(std::forward<T>(args)...); }
 	auto raster_vblank_callback() { return m_video.lookup()->vblank_callback(); }
 
 	template <u32 Event> void trigger_io_event() { m_io->trigger_event<Event>(); }
@@ -149,7 +148,6 @@ private:
 	devcb_read8 m_power_read_cb;
 	device_delegate<void ()> m_power_off_cb;
 	devcb_write8 m_external_bus_ctrl_cb;
-	device_delegate<void ()> m_vblank_cb;
 	device_delegate<u8 (offs_t)> m_external_code_read_cb;
 	device_delegate<u8 (offs_t)> m_external_data_read_cb;
 	memory_access<15, 0, 0, ENDIANNESS_LITTLE>::specific m_lowbus;

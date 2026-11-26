@@ -44,7 +44,7 @@
     - Sensor peripherals (e.g. bistro, rad_bb/rad_bb2 and rad_mtrk/rad_mtrkp):
       Verify physical timing and remaining sensor encodings.
     - Optical inputs (e.g. gungunad/gungunrv, rad_hnt/rad_hnt2, tomshoot,
-      epo_dmon, pl1000 and tak_daig): Verify physical calibration and event timing.
+      epo_dmon, pl1000 and tak_daig): Verify physical aim calibration.
     - Shared IR controllers (e.g. epo_epp/epo_epp2/epo_epp3, tak_comt and
       tak_wdg): Measure physical report cadence.
     - jarajal: Measure the hopper pulse interval and establish payout-control
@@ -114,7 +114,6 @@ void xavix_state::configure_board(machine_config &config)
 	m_soc->set_screen(m_screen);
 	m_soc->set_palette(m_palette);
 	m_soc->set_gfx_region(m_rom);
-	m_soc->set_vblank_callback(*this, FUNC(xavix_state::vblank_extra));
 	m_soc->lightgun_read_callback().set(*this, FUNC(xavix_state::lightgun_r));
 	m_soc->power_read_callback().set(*this, FUNC(xavix_state::power_status_r));
 	m_soc->set_power_off_callback(*this, FUNC(xavix_state::request_power_off));
@@ -642,24 +641,6 @@ INPUT_PORTS_START( xavix_reset_control )
 	PORT_START("RESET")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("Reset") PORT_CODE(input_seq::end_code)
 		PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(xavix_state::reset_button), 0)
-INPUT_PORTS_END
-
-static INPUT_PORTS_START( xavix_lightgun_1p )
-	PORT_START("GUN1_0")
-	PORT_BIT( 0xff, 0x80, IPT_LIGHTGUN_X ) PORT_CROSSHAIR(X, 1.0, 0.0, 0) PORT_SENSITIVITY(35) PORT_KEYDELTA(15) PORT_PLAYER(1)
-
-	PORT_START("GUN1_1")
-	PORT_BIT( 0xff, 0x80, IPT_LIGHTGUN_Y ) PORT_CROSSHAIR(Y, 1.0, 0.0, 0) PORT_SENSITIVITY(35) PORT_KEYDELTA(15) PORT_PLAYER(1)
-INPUT_PORTS_END
-
-static INPUT_PORTS_START( xavix_lightgun_2p )
-	PORT_INCLUDE(xavix_lightgun_1p)
-
-	PORT_START("GUN2_0")
-	PORT_BIT( 0xff, 0x80, IPT_LIGHTGUN_X ) PORT_CROSSHAIR(X, 1.0, 0.0, 0) PORT_SENSITIVITY(35) PORT_KEYDELTA(15) PORT_PLAYER(2)
-
-	PORT_START("GUN2_1")
-	PORT_BIT( 0xff, 0x80, IPT_LIGHTGUN_Y ) PORT_CROSSHAIR(Y, 1.0, 0.0, 0) PORT_SENSITIVITY(35) PORT_KEYDELTA(15) PORT_PLAYER(2) PORT_CODE_DEC(KEYCODE_E)
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( xavix_excite_controls )
@@ -1260,11 +1241,23 @@ INPUT_PORTS_END
 //  Systems Sharing Lightgun Inputs
 //-------------------------------------------------
 
-template <typename Base, u32 Players>
-void xavix_lightgun_state<Base, Players>::configure_lightgun_scanlines(machine_config &config, u8 event_mask)
+template <typename Base, u32 Players, u32 Player1Event, u32 Player2Event>
+void xavix_lightgun_state<Base, Players, Player1Event, Player2Event>::configure_board(machine_config &config)
 {
-	m_lightgun_event_mask = event_mask;
-	TIMER(config, "lightgun_timer").configure_scanline(FUNC(xavix_lightgun_state::lightgun_scanline_cb), "screen", 53, 10);
+	Base::configure_board(config);
+
+	auto const configure_gun = [this, &config] (u32 player, auto event, const char *event_name)
+	{
+		xavix_lightgun_device &gun(XAVIX_LIGHTGUN(config, m_gun[player], m_gun_model, player != 0));
+		gun.set_screen(this->m_screen);
+		gun.set_video_callback(this->m_soc, FUNC(xavix_soc_device::screen_update));
+		this->m_soc->raster_vblank_callback().append(gun, FUNC(xavix_lightgun_device::vblank_w));
+		gun.set_event_callback(this->m_soc, event, event_name);
+	};
+
+	configure_gun(0, FUNC(xavix_soc_device::trigger_io_event<Player1Event>));
+	if constexpr (Players == 2)
+		configure_gun(1, FUNC(xavix_soc_device::trigger_io_event<Player2Event>));
 }
 
 u8 xavix_state::lightgun_r(offs_t offset)
@@ -1274,16 +1267,14 @@ u8 xavix_state::lightgun_r(offs_t offset)
 	return 0xff;
 }
 
-template <typename Base, u32 Players>
-u8 xavix_lightgun_state<Base, Players>::lightgun_position_r(u32 player, offs_t offset, u16 x_offset, u16 y_scale, u16 y_offset, u16 x_scale)
+template <typename Base, u32 Players, u32 Player1Event, u32 Player2Event>
+u8 xavix_lightgun_state<Base, Players, Player1Event, Player2Event>::lightgun_position_r(u32 player, offs_t offset, u16 x_offset, u16 y_scale, u16 y_offset, u16 x_scale)
 {
 	if (player >= Players)
 		return 0xff;
 
-	u16 const rawx = m_lightgun_x[player]->read();
-	u16 const gunx = ((rawx * x_scale) >> 8) + x_offset;
-	u16 const rawy = m_lightgun_y[player]->read();
-	u16 const guny = ((rawy * y_scale) >> 8) + y_offset;
+	u16 const gunx = ((m_gun[player]->capture_x() * x_scale) >> 8) + x_offset;
+	u16 const guny = ((m_gun[player]->capture_y() * y_scale) >> 8) + y_offset;
 	switch (offset & 3)
 	{
 	case 0:
@@ -1297,67 +1288,34 @@ u8 xavix_lightgun_state<Base, Players>::lightgun_position_r(u32 player, offs_t o
 	}
 }
 
-template <typename Base, u32 Players>
-void xavix_lightgun_state<Base, Players>::lightgun_scanline_cb(timer_device &timer, s32 param)
-{
-	// These NTSC boards place picture row zero at raster row 13.
-	int const line = param - 13;
-	// Spread eight optical samples across the field so each event can be acknowledged before the next arrives.
-	if ((line >= 40) && (line <= 110) && ((line % 10) == 0))
-	{
-		u8 const mask = lightgun_event_mask();
-		if (BIT(mask, 0))
-			this->m_soc->template trigger_io_event<0>();
-		if (BIT(mask, 1))
-			this->m_soc->template trigger_io_event<1>();
-		if (BIT(mask, 2))
-			this->m_soc->template trigger_io_event<2>();
-		if (BIT(mask, 3))
-			this->m_soc->template trigger_io_event<3>();
-	}
-}
-
-
 // Gun Gun Adventure
 static INPUT_PORTS_START( gungunad )
 	PORT_INCLUDE(xavix)
 	PORT_INCLUDE(xavix_battery_status)
-	PORT_INCLUDE(xavix_reset_control)
-	PORT_INCLUDE(xavix_lightgun_2p)
 
 	PORT_MODIFY("IN0")
 	// IO0.0 reaches a dormant P1 action path, but no additional physical control is documented.
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_UNUSED )
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P1 Trigger") PORT_PLAYER(1)
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::trigger_r))
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_UNUSED )
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P2 Trigger") PORT_PLAYER(2) PORT_CONDITION("IN0", 0x40, EQUALS, 0x40)
 	// Startup tests this contact with the second gun absent; its physical source is unidentified.
-	// PORT_SERVICE_NO_TOGGLE( 0x08, IP_ACTIVE_HIGH ) PORT_NAME("Factory Test") PORT_CODE(KEYCODE_F1) PORT_CONDITION("IN0", 0x40, EQUALS, 0x00)
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_UNUSED ) PORT_CONDITION("IN0", 0x40, EQUALS, 0x00)
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun2", FUNC(xavix_lightgun_device::trigger_r))
 	PORT_BIT( 0x30, IP_ACTIVE_HIGH, IPT_UNUSED )
 	// This debounced line gates P2 activity; its identity as the detachable gun-present contact is inferred.
-	PORT_CONFNAME( 0x40, 0x00, "P2 Gun" )
-	PORT_CONFSETTING(    0x00, "Disconnected" )
-	PORT_CONFSETTING(    0x40, "Connected" )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun2", FUNC(xavix_lightgun_device::connected_r))
 	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_UNUSED )
 
 	PORT_MODIFY("IN1")
 	// This line changes the inactivity policy, but no AC adapter is documented for this model.
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_UNKNOWN )
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_POWER_OFF ) PORT_NAME("Power")
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::power_r))
 	PORT_BIT( 0xbb, IP_ACTIVE_HIGH, IPT_UNUSED )
-
-	PORT_MODIFY("GUN2_0")
-	PORT_BIT( 0xff, 0x80, IPT_LIGHTGUN_X ) PORT_CROSSHAIR(X, 1.0, 0.0, 0) PORT_SENSITIVITY(35) PORT_KEYDELTA(15) PORT_PLAYER(2) PORT_CONDITION("IN0", 0x40, EQUALS, 0x40)
-
-	PORT_MODIFY("GUN2_1")
-	PORT_BIT( 0xff, 0x80, IPT_LIGHTGUN_Y ) PORT_CROSSHAIR(Y, 1.0, 0.0, 0) PORT_SENSITIVITY(35) PORT_KEYDELTA(15) PORT_PLAYER(2) PORT_CODE_DEC(KEYCODE_E) PORT_CONDITION("IN0", 0x40, EQUALS, 0x40)
 INPUT_PORTS_END
 
 void xavix_gungunad_state::xavix_gungunad(machine_config &config)
 {
 	xavix_nv_2mb(config);
-	configure_lightgun_scanlines(config, 0x03);
+	m_gun[0]->reset_callback().set(m_soc, FUNC(xavix_soc_device::reset_w));
 }
 
 u8 xavix_gungunad_state::lightgun_r(offs_t offset)
@@ -1371,19 +1329,14 @@ u8 xavix_gungunad_state::lightgun_r(offs_t offset)
 static INPUT_PORTS_START( gungunrv )
 	PORT_INCLUDE(xavix_i2c)
 	PORT_INCLUDE(xavix_battery_status)
-	PORT_INCLUDE(xavix_hard_power_control)
-	PORT_INCLUDE(xavix_reset_control)
-	PORT_INCLUDE(xavix_lightgun_2p)
+	PORT_START("POWER")
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::power_r))
 
 	PORT_MODIFY("IN0")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P1 Trigger / Confirm")
-	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_NAME("P2 Support Gun Trigger") PORT_PLAYER(2) PORT_CONDITION("IN1", 0x02, EQUALS, 0x02)
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::trigger_r))
 	// The disconnected trigger level is inferred from the ROM's inactivity check.
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_UNUSED ) PORT_CONDITION("IN1", 0x02, EQUALS, 0x00)
-	// The gun's three-position power switch combines hard Off with vibration disabled/enabled.
-	PORT_CONFNAME( 0x08, 0x08, "Vibration" )
-	PORT_CONFSETTING(    0x00, DEF_STR( Off ) )
-	PORT_CONFSETTING(    0x08, DEF_STR( On ) )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(FUNC(xavix_gungunrv_state::support_trigger_r))
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::vibration_r))
 	// Startup selects the factory tests with IO0.6 low and no Support Gun; its physical source is unidentified.
 	// PORT_SERVICE_NO_TOGGLE( 0x40, IP_ACTIVE_LOW ) PORT_NAME("Factory Test") PORT_CODE(KEYCODE_F1)
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
@@ -1391,14 +1344,12 @@ static INPUT_PORTS_START( gungunrv )
 
 	PORT_MODIFY("IN1")
 	// The ROM debounces this contact before accepting shots from the optional Support Gun.
-	PORT_CONFNAME( 0x02, 0x00, "P2 Gun" )
-	PORT_CONFSETTING(    0x00, "Disconnected" )
-	PORT_CONFSETTING(    0x02, "Connected" )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun2", FUNC(xavix_lightgun_device::connected_r))
 	PORT_CONFNAME( 0x04, 0x00, "Demo Mode" )
 	PORT_CONFSETTING(    0x00, DEF_STR( Off ) )
 	PORT_CONFSETTING(    0x04, DEF_STR( On ) )
 	// IO1.6 selects grenade shots; the Support Gun has a separate single-shot path.
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("P1 Weapon Select (Machine Gun / Grenade)") PORT_PLAYER(1) PORT_TOGGLE PORT_CODE(KEYCODE_SPACE)
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::secondary_button_r))
 	PORT_BIT( 0xb1, IP_ACTIVE_HIGH, IPT_UNUSED )
 
 	PORT_MODIFY("AN7")
@@ -1406,18 +1357,14 @@ static INPUT_PORTS_START( gungunrv )
 	PORT_CONFSETTING(    0x00, "Normal" )
 	PORT_CONFSETTING(    0x28, "Low" )
 	PORT_CONFSETTING(    0x30, "Very Low" )
-
-	PORT_MODIFY("GUN2_0")
-	PORT_BIT( 0xff, 0x80, IPT_LIGHTGUN_X ) PORT_CROSSHAIR(X, 1.0, 0.0, 0) PORT_SENSITIVITY(35) PORT_KEYDELTA(15) PORT_PLAYER(2) PORT_CONDITION("IN1", 0x02, EQUALS, 0x02)
-
-	PORT_MODIFY("GUN2_1")
-	PORT_BIT( 0xff, 0x80, IPT_LIGHTGUN_Y ) PORT_CROSSHAIR(Y, 1.0, 0.0, 0) PORT_SENSITIVITY(35) PORT_KEYDELTA(15) PORT_PLAYER(2) PORT_CODE_DEC(KEYCODE_E) PORT_CONDITION("IN1", 0x02, EQUALS, 0x02)
 INPUT_PORTS_END
 
 void xavix_gungunrv_state::xavix_gungunrv(machine_config &config)
 {
 	xavix_i2c_24c04_4mb(config);
-	configure_lightgun_scanlines(config, 0x03);
+	m_gun[0]->set_recoil_output("Player1_Gun_Recoil");
+	m_gun[0]->reset_callback().set(m_soc, FUNC(xavix_soc_device::reset_w));
+	m_gun[0]->set_power_off_callback(*this, FUNC(xavix_gungunrv_state::request_power_off));
 }
 
 void xavix_gungunrv_state::machine_start()
@@ -1430,13 +1377,12 @@ void xavix_gungunrv_state::machine_reset()
 {
 	xavix_i2c_state::machine_reset();
 	m_shutdown_timer->adjust(attotime::never);
-	m_gun_recoil = 0;
 }
 
 void xavix_gungunrv_state::io0_output_w(u8 data, u8 direction)
 {
 	// IO0.4 drives the main gun's vibration motor; the Support Gun has no separate software drive.
-	m_gun_recoil = BIT(data & direction, 4);
+	m_gun[0]->recoil_w(BIT(data & direction, 4));
 }
 
 void xavix_gungunrv_state::io1_output_w(u8 data, u8 direction)
@@ -1469,41 +1415,27 @@ u8 xavix_gungunrv_state::lightgun_r(offs_t offset)
 static INPUT_PORTS_START( rad_hnt )
 	PORT_INCLUDE(xavix)
 	PORT_INCLUDE(xavix_battery_status)
-	PORT_INCLUDE(xavix_reset_control)
-	PORT_INCLUDE(xavix_lightgun_1p)
 
 	PORT_MODIFY("IN0")
-	// Keep paging buttons separate from the direction pad and keyboard aiming.
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("Menu Next") PORT_CODE(KEYCODE_PGDN)
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_NAME("Menu Previous") PORT_CODE(KEYCODE_PGUP)
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_BUTTON4 ) PORT_NAME("Menu Select")
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_NAME("Pause / Menu")
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_4WAY
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_4WAY
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_4WAY
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_4WAY
+	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_CUSTOM_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::panel_r))
 
 	PORT_MODIFY("IN1")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("Trigger")
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_NAME("Safety") PORT_TOGGLE
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_POWER_OFF ) PORT_NAME("Power")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::trigger_r))
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::secondary_button_r))
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::power_r))
 	PORT_BIT( 0xba, IP_ACTIVE_HIGH, IPT_UNUSED )
 INPUT_PORTS_END
 
 void xavix_rad_hnt_state::xavix_rad_hnt(machine_config &config)
 {
 	xavix_nv_1mb(config);
+	m_gun[0]->reset_callback().set(m_soc, FUNC(xavix_soc_device::reset_w));
 }
 
 void xavix_rad_hnt_state::xavix_rad_hnt2(machine_config &config)
 {
 	xavix_nv_2mb(config);
-}
-
-void xavix_rad_hnt_state::vblank_extra()
-{
-	// The hunting rifle supplies one accepted optical capture on event 3 per field.
-	m_soc->trigger_io_event<3>();
+	m_gun[0]->reset_callback().set(m_soc, FUNC(xavix_soc_device::reset_w));
 }
 
 u8 xavix_rad_hnt_state::lightgun_r(offs_t offset)
@@ -1519,10 +1451,10 @@ static INPUT_PORTS_START( tomshoot )
 	PORT_INCLUDE(xavix_soft_power_control)
 
 	PORT_MODIFY("IN0")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("P1 Pull / Charge") PORT_PLAYER(1)
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P1 Push / Shoot") PORT_PLAYER(1)
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("P2 Pull / Charge") PORT_PLAYER(2)
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P2 Push / Shoot") PORT_PLAYER(2)
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::secondary_button_r))
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::trigger_r))
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun2", FUNC(xavix_lightgun_device::secondary_button_r))
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun2", FUNC(xavix_lightgun_device::trigger_r))
 	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_UNKNOWN ) // Factory/demo strap with no identified public control.
 	PORT_BIT( 0xd0, IP_ACTIVE_HIGH, IPT_UNUSED )
 
@@ -1538,16 +1470,7 @@ static INPUT_PORTS_START( tomshoot )
 	PORT_CONFSETTING(    0x00, "Normal" )
 	PORT_CONFSETTING(    0x1f, "Low" )
 	PORT_CONFSETTING(    0x24, "Very Low" )
-
-	PORT_INCLUDE(xavix_lightgun_2p)
 INPUT_PORTS_END
-
-void xavix_tomshoot_state::vblank_extra()
-{
-	// Approximate each controller's beam-timed optical capture with one event token per field.
-	m_soc->trigger_io_event<0>();
-	m_soc->trigger_io_event<1>();
-}
 
 u8 xavix_tomshoot_state::lightgun_r(offs_t offset)
 {
@@ -1561,24 +1484,18 @@ u8 xavix_tomshoot_state::lightgun_r(offs_t offset)
 static INPUT_PORTS_START( epo_dmon )
 	PORT_INCLUDE(xavix_i2c)
 	// The primary air cannon has an underside latching power switch; inactivity uses the SoC's separate shutdown output.
-	PORT_INCLUDE(xavix_hard_power_control)
+	PORT_START("POWER")
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::power_r))
 
 	PORT_MODIFY("IN0")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P1 Air Cannon Trigger") PORT_PLAYER(1)
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P2 Air Cannon Trigger") PORT_PLAYER(2)
-
-	// Usability hack for users without host microphones.
-	PORT_START("MIC_SIMULATE")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("P1 Simulate Voice") PORT_PLAYER(1) PORT_CODE(KEYCODE_N) PORT_WRITE_LINE_DEVICE_MEMBER("microphone_tone1", FUNC(beep_device::set_state))
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("P2 Simulate Voice") PORT_PLAYER(2) PORT_CODE(KEYCODE_M) PORT_WRITE_LINE_DEVICE_MEMBER("microphone_tone2", FUNC(beep_device::set_state))
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::trigger_r))
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun2", FUNC(xavix_lightgun_device::trigger_r))
 
 	PORT_MODIFY("AN7")
 	PORT_CONFNAME( 0xff, 0x00, "Battery Status" )
 	PORT_CONFSETTING(    0x00, "Normal" )
 	PORT_CONFSETTING(    0x1a, "Low" )
 	PORT_CONFSETTING(    0x20, "Very Low" )
-
-	PORT_INCLUDE(xavix_lightgun_2p)
 
 	PORT_MODIFY("IN1")
 	PORT_CONFNAME( 0x04, 0x00, "Demo Mode" )
@@ -1590,20 +1507,16 @@ void xavix_epo_dmon_state::xavix_epo_dmon(machine_config &config)
 {
 	xavix_i2c_24c02_4mb(config);
 
-	// Each tethered air cannon has its own microphone: P1 uses AN0 and P2 uses AN1.
-	m_soc->set_adc_audio_input(0, 0);
-	m_soc->set_adc_audio_input(1, 1);
-	m_soc->add_adc_route(MICROPHONE(config, "microphone1", 1).front_center(), 0, 1.0, 0);
-	m_soc->add_adc_route(MICROPHONE(config, "microphone2", 1).front_center(), 0, 1.0, 1);
-	m_soc->add_adc_route(BEEP(config, "microphone_tone1", 1000), 0, 0.5, 0);
-	m_soc->add_adc_route(BEEP(config, "microphone_tone2", 1000), 0, 0.5, 1);
-}
+	m_gun[0]->set_power_off_callback(*this, FUNC(xavix_epo_dmon_state::request_power_off));
 
-void xavix_epo_dmon_state::vblank_extra()
-{
-	// Approximate each controller's beam-timed optical capture with one event token per field.
-	m_soc->trigger_io_event<0>();
-	m_soc->trigger_io_event<1>();
+	// Each cannon's microphone feeds its own ADC channel (AN0/AN1).
+	for (u32 player = 0; player < m_gun.size(); ++player)
+	{
+		xavix_lightgun_device const &gun = *m_gun[player];
+		m_soc->set_adc_audio_input(player, player);
+		m_soc->add_adc_route(gun.microphone(), 0, 1.0, player);
+		m_soc->add_adc_route(gun.voice_tone(), 0, 0.5, player);
+	}
 }
 
 u8 xavix_epo_dmon_state::lightgun_r(offs_t offset)
@@ -1619,20 +1532,20 @@ static INPUT_PORTS_START( pl1000 )
 	PORT_INCLUDE(xavix)
 	PORT_INCLUDE(xavix_hard_power_control)
 	PORT_INCLUDE(xavix_reset_control)
-	PORT_INCLUDE(xavix_lightgun_2p)
 
 	PORT_MODIFY("IN1")
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P1 Trigger") PORT_PLAYER(1)
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_START1 ) PORT_NAME("P1 Start")
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P2 Trigger") PORT_PLAYER(2)
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_START2 ) PORT_NAME("P2 Start")
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::trigger_r))
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::secondary_button_r))
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun2", FUNC(xavix_lightgun_device::trigger_r))
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun2", FUNC(xavix_lightgun_device::secondary_button_r))
 	PORT_BIT( 0x99, IP_ACTIVE_HIGH, IPT_UNUSED )
 INPUT_PORTS_END
 
 void xavix_pl1000_state::xavix_pl1000(machine_config &config)
 {
 	xavix_nv_2mb(config);
-	configure_lightgun_scanlines(config, 0x08);
+	for (u32 player = 0; player < m_gun.size(); ++player)
+		m_gun[player]->enable_callback().set([this, player] () -> int { return BIT(m_io1_out, 7) == player; });
 }
 
 void xavix_pl1000_state::init_pl1000()
@@ -3361,11 +3274,10 @@ void xavix_evio_state::io1_output_w(u8 data, u8 direction)
 static INPUT_PORTS_START( daig )
 	PORT_INCLUDE(xavix)
 	PORT_INCLUDE(xavix_reset_control)
-	PORT_INCLUDE(xavix_lightgun_1p)
 
 	PORT_MODIFY("IN0")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_UNKNOWN ) // Dragon Cannon sensor status is not understood.
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("Cannon Attack / Shot")
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("gun1", FUNC(xavix_lightgun_device::trigger_r))
 	PORT_BIT( 0x1c, IP_ACTIVE_HIGH, IPT_UNUSED )
 	// A maintained body contact selects the alternate form when the unit boots.
 	PORT_CONFNAME( 0x20, 0x00, "Body Form" )
@@ -3386,8 +3298,6 @@ void xavix_tak_daig_state::xavix_tak_daig(machine_config &config)
 	xavix_cart(config);
 	// Firmware alternates IO1.7 every field and releases this external RC hold on shutdown.
 	configure_power_hold(config);
-	// Eight event-0 samples satisfy the Dragon Cannon accumulator; the physical sensor cadence is unmeasured.
-	configure_lightgun_scanlines(config, 0x01);
 
 	NVRAM(config, m_nvram, nvram_device::DEFAULT_ALL_1);
 
