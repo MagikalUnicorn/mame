@@ -256,6 +256,8 @@ void xavix2000_i2c_camera_state::xavix2000_epo_bowl(machine_config &config)
 	xavix2000_i2c_24c04_2mb(config);
 	// The ball's reflective patch faces the floor console; the ROM derives the throw from its motion.
 	configure_camera(config, xavix_analog_image_sensor_device::target_shape::DISK);
+	// Empirical pixel timing leaves time to finish the aiming update after capture.
+	m_camera->set_half_pixel_clocks(38);
 }
 
 
@@ -306,6 +308,8 @@ void xavix2000_i2c_camera_state::xavix2000_ttv_sw(machine_config &config)
 {
 	xavix2000_i2c_24c02_camera(config);
 	m_camera->set_target_y_clipped(true);
+	// Empirical pixel timing keeps the ADC samples in their intended columns.
+	m_camera->set_half_pixel_clocks(47);
 }
 
 
@@ -418,6 +422,8 @@ void xavix2000_i2c_camera_state::xavix2000_ban_onep(machine_config &config)
 {
 	xavix2000_i2c_24c04(config);
 	XAVIX_ANALOG_IMAGE_SENSOR(config, m_camera, peripheral_clock()).set_target_count(2);
+	// Empirical timing keeps paired capture and game updates within one field; the sensor clock is unmeasured.
+	m_camera->set_half_pixel_clocks(32);
 	m_soc->adc_input_callback<0>().set(m_camera, FUNC(xavix_analog_image_sensor_device_base::pixel_r));
 }
 
