@@ -223,6 +223,8 @@ void xavix2000_i2c_camera_state::xavix2000_epo_golf(machine_config &config)
 {
 	xavix2000_i2c_24c04_4mb(config);
 	configure_camera(config, xavix_analog_image_sensor_device::target_shape::DISK);
+	// Empirical pixel timing avoids detecting a swing from a stationary club during the opening demo.
+	m_camera->set_half_pixel_clocks(40);
 }
 
 
