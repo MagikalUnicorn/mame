@@ -86,13 +86,6 @@ u32 superxavix_device::execute_max_cycles() const noexcept
 	return 8 * (5 * 8 + 4);
 }
 
-void superxavix_device::state_import(const device_state_entry &entry)
-{
-	// Debugger PC imports fetch immediately without advancing the bus.
-	auto const guard = machine().disable_side_effects(entry.index() == M6502_PC);
-	xavix2000_device::state_import(entry);
-}
-
 bool superxavix_device::wait_for_cycle(u64 cycle)
 {
 	u64 const now = total_cycles();

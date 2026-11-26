@@ -192,6 +192,7 @@ void superxavix_soc_device::superxavix_lowbus_map(address_map &map)
 void xavix_soc_device::device_add_mconfig(machine_config &config)
 {
 	XAVIX(config, m_maincpu, DERIVED_CLOCK(1, 2));
+	m_maincpu->external_read_clocks_callback().set(FUNC(xavix_soc_device::external_read_clocks));
 	XAVIX_VIDEO(config, m_video, DERIVED_CLOCK(1, 1));
 	m_maincpu->set_addrmap(xavix_device::AS_LOW_BUS, *this, &xavix_soc_device::xavix_lowbus_map);
 	configure_common(config);
@@ -202,6 +203,7 @@ void xavix_soc_device::device_add_mconfig(machine_config &config)
 void xavix2000_soc_device::device_add_mconfig(machine_config &config)
 {
 	XAVIX2000(config, m_maincpu, DERIVED_CLOCK(1, 2));
+	m_maincpu->external_read_clocks_callback().set(FUNC(xavix2000_soc_device::external_read_clocks));
 	XAVIX2000_VIDEO(config, m_video, DERIVED_CLOCK(1, 1));
 	m_maincpu->set_addrmap(xavix_device::AS_LOW_BUS, *this, &xavix2000_soc_device::xavix_lowbus_map);
 	configure_common(config);
@@ -436,6 +438,18 @@ u32 xavix_soc_device::screen_update(screen_device &screen, bitmap_rgb32 &bitmap,
 //  Memory Access Control
 //-------------------------------------------------
 
+u8 xavix_soc_device::external_read_clocks(offs_t address)
+{
+	if (!external_access(address))
+		return 2;
+
+	// SSD's US6070205A, figs. 10 and 11, selects the external area by A22 or A23.
+	// The read lengths are inferred from SuperXaviX.
+	bool const area_b = BIT(address, BIT(m_external_map_ctrl, 0) ? 22 : 23);
+	u8 const clocks = (area_b ? m_ram_access_ctrl : m_rom_access_ctrl) & 7;
+	return clocks ? clocks : 8;
+}
+
 u8 xavix_soc_device::rom_access_ctrl_r()
 {
 	return m_rom_access_ctrl;
@@ -455,6 +469,9 @@ u8 xavix_soc_device::ram_access_ctrl_r()
 
 void xavix_soc_device::ram_access_ctrl_w(u8 data)
 {
+	// TODO: Measure XaviX2000 writes on hardware. With $7901 = $05, repeating STAPB to area B
+	// and two NOPs from internal RAM takes 12 master clocks per sequence if the CPU can
+	// continue during the write, or 15 if it waits for completion.
 	LOG("%s: ram_access_ctrl_w %02x\n", machine().describe_context(), data);
 	m_ram_access_ctrl = data;
 	m_external_bus_ctrl_cb(1, data);

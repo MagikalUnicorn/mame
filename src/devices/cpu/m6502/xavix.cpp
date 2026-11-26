@@ -43,7 +43,8 @@ xavix_device::xavix_device(const machine_config &mconfig, device_type type, cons
 	m_lowbus_config("lowbus", ENDIANNESS_LITTLE, 8, 15),
 	m_extbus_config("extbus", ENDIANNESS_LITTLE, 8, 24),
 	m_interrupt_vector_callback(*this),
-	m_use_separate_codebank_stack(use_separate_codebank_stack)
+	m_use_separate_codebank_stack(use_separate_codebank_stack),
+	m_external_read_clocks_cb(*this, 2)
 {
 	m_program_config.m_addr_width = 24;
 	m_program_config.m_logaddr_width = 24;
@@ -100,10 +101,13 @@ void xavix_device::device_start()
 	save_item(NAME(m_codebank));
 	save_item(NAME(m_codebank_stack));
 	save_item(NAME(m_codebank_stack_pointer));
+	if (!m_external_read_clocks_cb.isunset())
+		save_item(NAME(m_rom_clock_remainder));
 }
 
 void xavix_device::device_reset()
 {
+	m_rom_clock_remainder = 0;
 	m_codebank_stack_pointer = 0xff;
 	std::ranges::fill(m_codebank_stack, 0x00);
 
@@ -123,6 +127,12 @@ std::unique_ptr<util::disasm_interface> xavix_device::create_disassembler()
 offs_t xavix_device::pc_to_external(u16 pc)
 {
 	return code_address(pc);
+}
+
+u32 xavix_device::execute_max_cycles() const noexcept
+{
+	// An eight-master-clock external read takes four CPU cycles.
+	return m6502_device::execute_max_cycles() * 4;
 }
 
 void xavix_device::write_codebank_stack(uint32_t addr, uint8_t data)
@@ -222,7 +232,23 @@ inline uint8_t xavix_device::mi_xavix::read(uint16_t adr)
 
 uint8_t xavix_device::mi_xavix::read_banked(uint32_t adr)
 {
-	return m_base->read_banked_data_raw(adr);
+	return m_base->finish_read(adr, m_base->read_banked_data_raw(adr));
+}
+
+u8 xavix_device::finish_read(u32 address, u8 data)
+{
+	if (machine().side_effects_disabled() || access_to_be_redone_noclear())
+		return data;
+
+	u8 const clocks = m_external_read_clocks_cb(address);
+	if (clocks > 2)
+	{
+		// The opcode core already accounts for two master clocks per access.
+		u32 const wait = clocks - 2 + m_rom_clock_remainder;
+		access_after_delay(wait / 2);
+		m_rom_clock_remainder = BIT(wait, 0);
+	}
+	return data;
 }
 
 // opcode reads
@@ -231,7 +257,8 @@ uint8_t xavix_device::mi_xavix::read_sync(uint16_t adr)
 	if (m_base->m_full_bank_register_decode && m_base->codebank() == 0 && (adr == 0xfe || adr == 0xff))
 		return m_base->read_zeropage(adr);
 
-	return m_csprogram.read_interruptible(m_base->code_address(adr));
+	u32 const address = m_base->code_address(adr);
+	return m_base->finish_read(address, m_csprogram.read_interruptible(address));
 }
 
 // oprand reads
@@ -240,7 +267,8 @@ uint8_t xavix_device::mi_xavix::read_arg(uint16_t adr)
 	if (m_base->m_full_bank_register_decode && m_base->codebank() == 0 && (adr == 0xfe || adr == 0xff))
 		return m_base->read_zeropage(adr);
 
-	return m_cprogram.read_interruptible(m_base->code_address(adr));
+	u32 const address = m_base->code_address(adr);
+	return m_base->finish_read(address, m_cprogram.read_interruptible(address));
 }
 
 // data writes
@@ -342,6 +370,13 @@ inline uint8_t xavix_device::databank()
 }
 
 
+
+void xavix_device::state_import(const device_state_entry &entry)
+{
+	// Debugger PC imports fetch immediately without advancing the bus.
+	auto const guard = machine().disable_side_effects(entry.index() == M6502_PC);
+	m6502_device::state_import(entry);
+}
 
 void xavix_device::state_string_export(const device_state_entry &entry, std::string &str) const
 {

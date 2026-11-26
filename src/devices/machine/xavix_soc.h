@@ -87,6 +87,7 @@ protected:
 	virtual void device_reset() override ATTR_COLD;
 
 	void xavix_lowbus_map(address_map &map) ATTR_COLD;
+	u8 external_read_clocks(offs_t address);
 	void configure_common(machine_config &config) ATTR_COLD;
 	virtual void configure_io(machine_config &config) ATTR_COLD;
 

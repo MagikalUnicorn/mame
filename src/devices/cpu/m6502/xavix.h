@@ -25,6 +25,7 @@ public:
 	using xavix_interrupt_vector_delegate = device_delegate<int16_t (int source, int low_byte)>;
 
 	template <typename... T> void set_interrupt_vector_callback(T &&... args) { m_interrupt_vector_callback.set(std::forward<T>(args)...); }
+	auto external_read_clocks_callback() { return m_external_read_clocks_cb.bind(); }
 	void set_data_address_mask(u32 mask) { m_data_address_mask = mask; }
 
 	// Other bus masters bypass CPU buffering and wait states.
@@ -67,7 +68,9 @@ protected:
 
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
+	virtual u32 execute_max_cycles() const noexcept override;
 	virtual offs_t pc_to_external(u16 pc) override;
+	virtual void state_import(const device_state_entry &entry) override;
 	virtual void state_string_export(const device_state_entry &entry, std::string &str) const override;
 
 	// device_memory_interface overrides
@@ -237,6 +240,12 @@ protected:
 	// big with the extra bytes
 	//
 	bool m_use_separate_codebank_stack;
+
+private:
+	u8 finish_read(u32 address, u8 data);
+
+	devcb_read8 m_external_read_clocks_cb;
+	u8 m_rom_clock_remainder;
 };
 
 DECLARE_DEVICE_TYPE(XAVIX, xavix_device)
