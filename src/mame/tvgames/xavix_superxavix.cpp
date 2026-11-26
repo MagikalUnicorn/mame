@@ -391,8 +391,8 @@ xavix_analog_image_sensor_device &superxavix_i2c_camera_state::configure_dual_re
 {
 	auto &camera = XAVIX_ANALOG_IMAGE_SENSOR(config, m_camera, peripheral_clock());
 	camera.set_target_count(2);
-	// Representative LOW time allows ADC priming; HIGH is shorter than the ROM's four-poll frame-gap test.
-	camera.set_pixel_clocks(64, 32);
+	// Empirical timing for ADC priming and the ROM's four-poll frame-gap detection.
+	camera.set_pixel_clocks(64, 31);
 	camera.set_frame_gap_pixel_high(true);
 	m_soc->adc_input_callback<0>().set(camera, FUNC(xavix_analog_image_sensor_device_base::pixel_r));
 	return camera;
@@ -1529,8 +1529,8 @@ void superxavix_i2c_camera_state::superxavix_epo_rgfj(machine_config &config)
 	superxavix_i2c_24c08(config);
 	m_soc->io_output_callback<1>().append(*this, FUNC(superxavix_i2c_camera_state::io1_power_off_w));
 	auto &camera = XAVIX_ANALOG_IMAGE_SENSOR(config, m_camera, peripheral_clock());
-	// Empirical timing separates the ROM's five-poll frame test from ordinary pixels; the sensor clock is unmeasured.
-	camera.set_half_pixel_clocks(40);
+	// Empirical pixel timing leaves time for the aiming update after both scans.
+	camera.set_half_pixel_clocks(34);
 	camera.set_frame_gap_pixel_high(true);
 	// TODO: Verify the club's optical geometry and the physical event source.
 	camera.set_target_shape(xavix_analog_image_sensor_device::target_shape::ROD);
